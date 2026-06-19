@@ -51,10 +51,10 @@ Alembic 迁移环境也使用同一个入口，因此迁移和应用拥有一致
 开发环境默认使用便于阅读的文本格式：
 
 ```text
-2026-06-19 20:00:00 | INFO     | development | videocenter.main | Application started
+2026-06-19 20:00:00 | INFO | development | request-id | videocenter.main | Application started
 ```
 
-包含时间、级别、环境、日志器名称和消息。
+包含时间、级别、环境、请求 ID、日志器名称和消息。与请求无关的启动、迁移等日志使用 `-` 作为请求 ID。
 
 ## JSON 格式
 

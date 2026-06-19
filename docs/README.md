@@ -9,5 +9,6 @@
 - [B03：开发、测试、生产环境配置](environment-configuration.md)
 - [B04：统一日志配置](logging-configuration.md)
 - [B05：统一异常处理](exception-handling.md)
+- [B06：统一 API 错误响应格式](api-error-response.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

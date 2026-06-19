@@ -20,6 +20,8 @@ class EnvironmentFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.environment = self.environment
+        if not hasattr(record, "request_id"):
+            record.request_id = "-"
         return True
 
 
@@ -80,7 +82,7 @@ def build_logging_config(settings: Settings) -> dict[str, Any]:
             "text": {
                 "format": (
                     "%(asctime)s | %(levelname)-8s | %(environment)s | "
-                    "%(name)s | %(message)s"
+                    "%(request_id)s | %(name)s | %(message)s"
                 ),
                 "datefmt": "%Y-%m-%d %H:%M:%S",
             },

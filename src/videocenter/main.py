@@ -5,9 +5,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from videocenter.api.exception_handlers import register_exception_handlers
+from videocenter.api.middleware import RequestContextMiddleware
 from videocenter.api.router import api_router
 from videocenter.core.config import get_settings
 from videocenter.core.logging import configure_logging
+from videocenter.schemas.error import STANDARD_ERROR_RESPONSES
 
 settings = get_settings()
 configure_logging(settings)
@@ -30,8 +32,10 @@ app = FastAPI(
     docs_url="/docs" if settings.docs_enabled else None,
     redoc_url="/redoc" if settings.docs_enabled else None,
     openapi_url="/openapi.json" if settings.docs_enabled else None,
+    responses=STANDARD_ERROR_RESPONSES,
     lifespan=lifespan,
 )
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

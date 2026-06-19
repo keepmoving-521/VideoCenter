@@ -168,6 +168,9 @@ python -m pytest
 业务异常、参数校验和服务端错误处理请参阅
 [统一异常处理文档](docs/exception-handling.md)。
 
+标准错误模型、请求追踪 ID 和 OpenAPI 声明请参阅
+[API 错误响应格式](docs/api-error-response.md)。
+
 ## 项目结构
 
 ```text

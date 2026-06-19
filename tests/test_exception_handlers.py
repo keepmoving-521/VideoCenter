@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
 from videocenter.api.exception_handlers import register_exception_handlers
+from videocenter.api.middleware import REQUEST_ID_HEADER, RequestContextMiddleware
 from videocenter.core.config import AppEnvironment, Settings
 from videocenter.core.exceptions import NotFoundError
 
@@ -15,6 +16,7 @@ def create_test_app(*, debug_details: bool = False) -> FastAPI:
         _env_file=None,
     )
     app = FastAPI()
+    app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app, settings)
 
     @app.get("/business-error")
@@ -45,13 +47,14 @@ def test_business_exception_uses_stable_error_code():
         response = client.get("/business-error")
 
     assert response.status_code == 404
-    assert response.json() == {
-        "error": {
-            "code": "MEDIA_NOT_FOUND",
-            "message": "影视条目不存在",
-            "details": None,
-        }
+    payload = response.json()
+    assert payload["error"] == {
+        "code": "MEDIA_NOT_FOUND",
+        "message": "影视条目不存在",
+        "details": None,
     }
+    assert payload["meta"]["path"] == "/business-error"
+    assert payload["meta"]["request_id"] == response.headers[REQUEST_ID_HEADER]
 
 
 def test_http_exception_is_normalized():
@@ -113,3 +116,27 @@ def test_debug_mode_exposes_unexpected_exception_details():
 
     assert response.status_code == 500
     assert response.json()["error"]["details"] == "sensitive internal detail"
+
+
+def test_valid_client_request_id_is_preserved():
+    request_id = "client-request-123"
+    with TestClient(create_test_app()) as client:
+        response = client.get(
+            "/business-error",
+            headers={REQUEST_ID_HEADER: request_id},
+        )
+
+    assert response.headers[REQUEST_ID_HEADER] == request_id
+    assert response.json()["meta"]["request_id"] == request_id
+
+
+def test_invalid_client_request_id_is_replaced():
+    with TestClient(create_test_app()) as client:
+        response = client.get(
+            "/business-error",
+            headers={REQUEST_ID_HEADER: "bad"},
+        )
+
+    generated_id = response.headers[REQUEST_ID_HEADER]
+    assert generated_id != "bad"
+    assert len(generated_id) == 32

@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 from http import HTTPStatus
 from typing import Any
 
@@ -9,32 +10,42 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from videocenter.api.middleware import REQUEST_ID_HEADER
 from videocenter.core.config import Settings
 from videocenter.core.exceptions import AppException
+from videocenter.schemas.error import ErrorDetail, ErrorMeta, ErrorResponse
 
 logger = logging.getLogger(__name__)
 
 
 def error_response(
     *,
+    request: Request,
     status_code: int,
     code: str,
     message: str,
     details: Any = None,
     headers: dict[str, str] | None = None,
 ) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    response_headers = dict(headers or {})
+    response_headers[REQUEST_ID_HEADER] = request_id
+    payload = ErrorResponse(
+        error=ErrorDetail(
+            code=code,
+            message=message,
+            details=details,
+        ),
+        meta=ErrorMeta(
+            request_id=request_id,
+            timestamp=datetime.now(UTC),
+            path=request.url.path,
+        ),
+    )
     return JSONResponse(
         status_code=status_code,
-        content=jsonable_encoder(
-            {
-                "error": {
-                    "code": code,
-                    "message": message,
-                    "details": details,
-                }
-            }
-        ),
-        headers=headers,
+        content=jsonable_encoder(payload),
+        headers=response_headers,
     )
 
 
@@ -50,9 +61,11 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
                 "status_code": exc.status_code,
                 "request_method": request.method,
                 "request_path": request.url.path,
+                "request_id": request.state.request_id,
             },
         )
         return error_response(
+            request=request,
             status_code=exc.status_code,
             code=exc.code,
             message=exc.message,
@@ -71,9 +84,11 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
                 "status_code": 422,
                 "request_method": request.method,
                 "request_path": request.url.path,
+                "request_id": request.state.request_id,
             },
         )
         return error_response(
+            request=request,
             status_code=422,
             code="VALIDATION_ERROR",
             message="请求参数校验失败",
@@ -97,9 +112,11 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
                 "status_code": exc.status_code,
                 "request_method": request.method,
                 "request_path": request.url.path,
+                "request_id": request.state.request_id,
             },
         )
         return error_response(
+            request=request,
             status_code=exc.status_code,
             code=f"HTTP_{exc.status_code}",
             message=message,
@@ -118,9 +135,11 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
                 "status_code": 500,
                 "request_method": request.method,
                 "request_path": request.url.path,
+                "request_id": request.state.request_id,
             },
         )
         return error_response(
+            request=request,
             status_code=500,
             code="DATABASE_ERROR",
             message="数据库操作失败",
@@ -138,9 +157,11 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
                 "status_code": 500,
                 "request_method": request.method,
                 "request_path": request.url.path,
+                "request_id": request.state.request_id,
             },
         )
         return error_response(
+            request=request,
             status_code=500,
             code="INTERNAL_SERVER_ERROR",
             message="服务器内部错误",
