@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -38,7 +40,10 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{task_id}", response_model=DownloadRead)
-def get_download(task_id: int, db: Session = Depends(get_db)):
+def get_download(
+    task_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
     task = db.get(DownloadTask, task_id)
     if not task:
         raise NotFoundError("下载任务不存在", code="DOWNLOAD_TASK_NOT_FOUND")
@@ -46,7 +51,10 @@ def get_download(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{task_id}/cancel", response_model=DownloadRead)
-def cancel(task_id: int, db: Session = Depends(get_db)):
+def cancel(
+    task_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
     task = db.get(DownloadTask, task_id)
     if not task:
         raise NotFoundError("下载任务不存在", code="DOWNLOAD_TASK_NOT_FOUND")

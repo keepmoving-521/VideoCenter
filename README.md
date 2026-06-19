@@ -171,6 +171,9 @@ python -m pytest
 标准错误模型、请求追踪 ID 和 OpenAPI 声明请参阅
 [API 错误响应格式](docs/api-error-response.md)。
 
+请求体、路径、查询参数和请求头的校验规则请参阅
+[请求参数校验文档](docs/request-validation.md)。
+
 ## 项目结构
 
 ```text

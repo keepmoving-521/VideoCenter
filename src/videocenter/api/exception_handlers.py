@@ -18,6 +18,20 @@ from videocenter.schemas.error import ErrorDetail, ErrorMeta, ErrorResponse
 logger = logging.getLogger(__name__)
 
 
+def normalize_validation_errors(
+    errors: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    normalized = []
+    for error in errors:
+        item = dict(error)
+        if "ctx" in item:
+            item["ctx"] = {
+                key: str(value) for key, value in item["ctx"].items()
+            }
+        normalized.append(item)
+    return normalized
+
+
 def error_response(
     *,
     request: Request,
@@ -92,7 +106,7 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
             status_code=422,
             code="VALIDATION_ERROR",
             message="请求参数校验失败",
-            details=exc.errors(),
+            details=normalize_validation_errors(exc.errors()),
         )
 
     @app.exception_handler(StarletteHTTPException)

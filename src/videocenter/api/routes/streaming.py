@@ -1,6 +1,8 @@
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header
+from fastapi import Path as ApiPath
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -14,8 +16,11 @@ router = APIRouter()
 
 @router.get("/{resource_id}")
 def stream_video(
-    resource_id: int,
-    range_header: str | None = Header(default=None, alias="Range"),
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    range_header: Annotated[
+        str | None,
+        Header(alias="Range", max_length=128, pattern=r"^bytes=[0-9]*-[0-9]*$"),
+    ] = None,
     db: Session = Depends(get_db),
 ):
     resource = db.get(LocalResource, resource_id)
