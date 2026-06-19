@@ -1,5 +1,7 @@
 # VideoCenter
 
+[![CI](https://github.com/keepmoving-521/VideoCenter/actions/workflows/ci.yml/badge.svg)](https://github.com/keepmoving-521/VideoCenter/actions/workflows/ci.yml)
+
 VideoCenter 是一个面向个人使用的轻量级影视库后端，用于统一管理影视条目、下载任务、本地视频、在线播放进度和观看历史。
 
 ## 当前能力
@@ -185,6 +187,9 @@ API 客户端、数据工厂、响应断言和集成测试标记请参阅
 
 提交前自动文件检查和 Ruff hooks 的安装方式请参阅
 [pre-commit 配置文档](docs/pre-commit.md)。
+
+GitHub Actions 自动检查、测试与覆盖率流程请参阅
+[GitHub Actions 文档](docs/github-actions.md)。
 
 ## 项目结构
 

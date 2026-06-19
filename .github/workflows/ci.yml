@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Quality and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      VIDEOCENTER_ENVIRONMENT: testing
+      VIDEOCENTER_DATABASE_URL: sqlite:///./data/ci.db
+      VIDEOCENTER_LOG_FILE_ENABLED: "false"
+      VIDEOCENTER_DOCS_ENABLED: "false"
+      PRE_COMMIT_HOME: ${{ github.workspace }}/.pre-commit-cache
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          version: "0.11.22"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Run pre-commit checks
+        run: uv run pre-commit run --all-files
+
+      - name: Validate database migrations
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest \
+            --cov=videocenter \
+            --cov-report=term-missing \
+            --cov-report=xml
