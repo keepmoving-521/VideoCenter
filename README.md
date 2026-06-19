@@ -174,6 +174,9 @@ python -m pytest
 请求体、路径、查询参数和请求头的校验规则请参阅
 [请求参数校验文档](docs/request-validation.md)。
 
+pytest 使用独立数据库的创建、迁移、隔离和清理机制请参阅
+[测试专用数据库文档](docs/testing-database.md)。
+
 ## 项目结构
 
 ```text
