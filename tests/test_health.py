@@ -1,3 +1,5 @@
+from fastapi.testclient import TestClient
+
 from videocenter.api.routes.health import health
 from videocenter.main import app
 
@@ -7,4 +9,7 @@ def test_health():
 
 
 def test_health_route_is_registered():
-    assert "/api/v1/health" in {route.path for route in app.routes}
+    with TestClient(app) as client:
+        response = client.get("/api/v1/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
