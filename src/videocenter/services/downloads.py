@@ -59,7 +59,10 @@ def _run_download(task_id: int, cancel_event: threading.Event) -> None:
             request = urllib.request.Request(
                 task.source_url, headers={"User-Agent": "VideoCenter/0.1"}
             )
-            with urllib.request.urlopen(request, timeout=30) as response, temp_path.open("wb") as output:
+            with (
+                urllib.request.urlopen(request, timeout=30) as response,
+                temp_path.open("wb") as output,
+            ):
                 total = int(response.headers.get("Content-Length", 0))
                 downloaded = 0
                 while chunk := response.read(1024 * 1024):
@@ -83,8 +86,7 @@ def _run_download(task_id: int, cancel_event: threading.Event) -> None:
                     file_path=str(target.resolve()),
                     file_name=target.name,
                     file_size=target.stat().st_size,
-                    mime_type=mimetypes.guess_type(target.name)[0]
-                    or "application/octet-stream",
+                    mime_type=mimetypes.guess_type(target.name)[0] or "application/octet-stream",
                 )
             )
             db.commit()

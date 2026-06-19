@@ -180,6 +180,9 @@ pytest 使用独立数据库的创建、迁移、隔离和清理机制请参阅
 API 客户端、数据工厂、响应断言和集成测试标记请参阅
 [API 集成测试框架](docs/api-integration-testing.md)。
 
+统一 Ruff lint、格式检查和自动修复用法请参阅
+[Ruff 代码检查文档](docs/ruff-code-check.md)。
+
 ## 项目结构
 
 ```text

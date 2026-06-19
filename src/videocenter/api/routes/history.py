@@ -15,9 +15,7 @@ router = APIRouter()
 
 @router.get("", response_model=list[HistoryRead])
 def list_history(db: Session = Depends(get_db)):
-    return db.scalars(
-        select(WatchHistory).order_by(WatchHistory.watched_at.desc())
-    ).all()
+    return db.scalars(select(WatchHistory).order_by(WatchHistory.watched_at.desc())).all()
 
 
 @router.put("", response_model=HistoryRead)
@@ -33,9 +31,7 @@ def save_history(payload: HistoryUpsert, db: Session = Depends(get_db)):
                 "本地资源不属于指定影视条目",
                 code="RESOURCE_MEDIA_MISMATCH",
             )
-    history = db.scalar(
-        select(WatchHistory).where(WatchHistory.media_id == payload.media_id)
-    )
+    history = db.scalar(select(WatchHistory).where(WatchHistory.media_id == payload.media_id))
     if history is None:
         history = WatchHistory(**payload.model_dump())
         db.add(history)
@@ -52,9 +48,7 @@ def delete_history(
     media_id: Annotated[int, Path(gt=0)],
     db: Session = Depends(get_db),
 ) -> None:
-    history = db.scalar(
-        select(WatchHistory).where(WatchHistory.media_id == media_id)
-    )
+    history = db.scalar(select(WatchHistory).where(WatchHistory.media_id == media_id))
     if not history:
         raise NotFoundError("观看记录不存在", code="WATCH_HISTORY_NOT_FOUND")
     db.delete(history)

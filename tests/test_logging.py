@@ -39,9 +39,7 @@ def test_json_file_logging_contains_standard_context():
 
     try:
         configure_logging(settings)
-        logging.getLogger("videocenter.test").info(
-            "日志测试", extra={"task_id": 42}
-        )
+        logging.getLogger("videocenter.test").info("日志测试", extra={"task_id": 42})
         for handler in root_logger.handlers:
             handler.flush()
 

@@ -81,9 +81,7 @@ def test_validation_exception_contains_field_details():
 
 
 def test_database_exception_hides_internal_details():
-    with TestClient(
-        create_test_app(), raise_server_exceptions=False
-    ) as client:
+    with TestClient(create_test_app(), raise_server_exceptions=False) as client:
         response = client.get("/database-error")
 
     assert response.status_code == 500
@@ -95,9 +93,7 @@ def test_database_exception_hides_internal_details():
 
 
 def test_unexpected_exception_hides_details_by_default():
-    with TestClient(
-        create_test_app(), raise_server_exceptions=False
-    ) as client:
+    with TestClient(create_test_app(), raise_server_exceptions=False) as client:
         response = client.get("/unexpected-error")
 
     assert response.status_code == 500
@@ -109,9 +105,7 @@ def test_unexpected_exception_hides_details_by_default():
 
 
 def test_debug_mode_exposes_unexpected_exception_details():
-    with TestClient(
-        create_test_app(debug_details=True), raise_server_exceptions=False
-    ) as client:
+    with TestClient(create_test_app(debug_details=True), raise_server_exceptions=False) as client:
         response = client.get("/unexpected-error")
 
     assert response.status_code == 500

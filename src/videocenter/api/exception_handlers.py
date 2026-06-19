@@ -25,9 +25,7 @@ def normalize_validation_errors(
     for error in errors:
         item = dict(error)
         if "ctx" in item:
-            item["ctx"] = {
-                key: str(value) for key, value in item["ctx"].items()
-            }
+            item["ctx"] = {key: str(value) for key, value in item["ctx"].items()}
         normalized.append(item)
     return normalized
 
@@ -65,9 +63,7 @@ def error_response(
 
 def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
     @app.exception_handler(AppException)
-    async def handle_app_exception(
-        request: Request, exc: AppException
-    ) -> JSONResponse:
+    async def handle_app_exception(request: Request, exc: AppException) -> JSONResponse:
         logger.warning(
             "Application error",
             extra={
@@ -110,14 +106,8 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def handle_http_exception(
-        request: Request, exc: StarletteHTTPException
-    ) -> JSONResponse:
-        message = (
-            exc.detail
-            if isinstance(exc.detail, str)
-            else HTTPStatus(exc.status_code).phrase
-        )
+    async def handle_http_exception(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        message = exc.detail if isinstance(exc.detail, str) else HTTPStatus(exc.status_code).phrase
         details = None if isinstance(exc.detail, str) else exc.detail
         logger.warning(
             "HTTP error",
@@ -139,9 +129,7 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
         )
 
     @app.exception_handler(SQLAlchemyError)
-    async def handle_database_exception(
-        request: Request, exc: SQLAlchemyError
-    ) -> JSONResponse:
+    async def handle_database_exception(request: Request, exc: SQLAlchemyError) -> JSONResponse:
         logger.exception(
             "Database operation failed",
             extra={
@@ -161,9 +149,7 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def handle_unexpected_exception(
-        request: Request, exc: Exception
-    ) -> JSONResponse:
+    async def handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
         logger.exception(
             "Unhandled application error",
             extra={

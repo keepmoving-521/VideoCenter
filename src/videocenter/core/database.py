@@ -21,9 +21,7 @@ def create_database_engine(database_url: str, *, echo: bool = False):
     return create_engine(
         database_url,
         echo=echo,
-        connect_args={"check_same_thread": False}
-        if database_url.startswith("sqlite")
-        else {},
+        connect_args={"check_same_thread": False} if database_url.startswith("sqlite") else {},
     )
 
 

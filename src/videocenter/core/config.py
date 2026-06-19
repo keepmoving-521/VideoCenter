@@ -88,9 +88,7 @@ class Settings(BaseSettings):
 def get_environment(value: AppEnvironment | str | None = None) -> AppEnvironment:
     if value is not None:
         return AppEnvironment(value)
-    return AppEnvironment(
-        os.getenv("VIDEOCENTER_ENVIRONMENT", AppEnvironment.DEVELOPMENT.value)
-    )
+    return AppEnvironment(os.getenv("VIDEOCENTER_ENVIRONMENT", AppEnvironment.DEVELOPMENT.value))
 
 
 @lru_cache

@@ -1,5 +1,5 @@
-import enum
 from datetime import datetime
+from enum import StrEnum
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from videocenter.core.database import Base
 
 
-class DownloadStatus(str, enum.Enum):
+class DownloadStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"

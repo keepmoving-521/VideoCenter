@@ -17,6 +17,9 @@ dependencies = [
     "uvicorn[standard]>=0.34,<1.0",
 ]
 
+[project.scripts]
+videocenter-lint = "videocenter.quality:main"
+
 [project.optional-dependencies]
 dev = [
     "httpx>=0.28,<1.0",
@@ -42,3 +45,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/videocenter/api/routes/*.py" = ["B008"]

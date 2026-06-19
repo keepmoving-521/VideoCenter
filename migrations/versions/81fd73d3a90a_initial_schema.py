@@ -49,9 +49,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     with op.batch_alter_table("media", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_media_media_type"), ["media_type"], unique=False
-        )
+        batch_op.create_index(batch_op.f("ix_media_media_type"), ["media_type"], unique=False)
         batch_op.create_index(batch_op.f("ix_media_title"), ["title"], unique=False)
 
     op.create_table(
@@ -91,12 +89,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     with op.batch_alter_table("download_tasks", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_download_tasks_media_id"), ["media_id"], unique=False
-        )
-        batch_op.create_index(
-            batch_op.f("ix_download_tasks_status"), ["status"], unique=False
-        )
+        batch_op.create_index(batch_op.f("ix_download_tasks_media_id"), ["media_id"], unique=False)
+        batch_op.create_index(batch_op.f("ix_download_tasks_status"), ["status"], unique=False)
 
     op.create_table(
         "local_resources",
@@ -118,9 +112,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("file_path"),
     )
     with op.batch_alter_table("local_resources", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_local_resources_media_id"), ["media_id"], unique=False
-        )
+        batch_op.create_index(batch_op.f("ix_local_resources_media_id"), ["media_id"], unique=False)
 
     op.create_table(
         "watch_history",
@@ -141,9 +133,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("media_id", name="uq_history_media"),
     )
     with op.batch_alter_table("watch_history", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_watch_history_media_id"), ["media_id"], unique=False
-        )
+        batch_op.create_index(batch_op.f("ix_watch_history_media_id"), ["media_id"], unique=False)
         batch_op.create_index(
             batch_op.f("ix_watch_history_watched_at"), ["watched_at"], unique=False
         )

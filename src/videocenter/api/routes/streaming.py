@@ -42,9 +42,7 @@ def stream_video(
         ) from None
 
     if byte_range is None:
-        return FileResponse(
-            path, media_type=resource.mime_type, headers={"Accept-Ranges": "bytes"}
-        )
+        return FileResponse(path, media_type=resource.mime_type, headers={"Accept-Ranges": "bytes"})
 
     return StreamingResponse(
         iter_file_range(str(path), byte_range),

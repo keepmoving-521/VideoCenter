@@ -35,9 +35,7 @@ def scan_local_library(
 
     for path in files:
         normalized = str(path.resolve())
-        resource = db.scalar(
-            select(LocalResource).where(LocalResource.file_path == normalized)
-        )
+        resource = db.scalar(select(LocalResource).where(LocalResource.file_path == normalized))
         mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         if resource:
             resource.file_size = path.stat().st_size

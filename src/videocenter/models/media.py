@@ -1,5 +1,5 @@
-import enum
 from datetime import datetime
+from enum import StrEnum
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from videocenter.core.database import Base
 
 
-class MediaType(str, enum.Enum):
+class MediaType(StrEnum):
     MOVIE = "movie"
     SERIES = "series"
     OTHER = "other"
