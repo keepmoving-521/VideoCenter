@@ -119,6 +119,9 @@ ipython_config.py
 
 # VideoCenter runtime data
 .env
+.env.development
+.env.testing
+.env.production
 data/
 .uv-cache/
 

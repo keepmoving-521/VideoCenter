@@ -157,6 +157,11 @@ python -m pytest
 
 其他迭代专题请参阅[开发文档索引](docs/README.md)。
 
+## 运行环境
+
+系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅
+[多环境配置文档](docs/environment-configuration.md)。
+
 ## 项目结构
 
 ```text
