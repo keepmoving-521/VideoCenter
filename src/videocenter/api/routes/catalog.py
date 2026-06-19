@@ -3,19 +3,22 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from videocenter.models.media import Episode, Media, MediaType, Season, Tag
 from videocenter.schemas.catalog import (
     EpisodeCreate,
+    EpisodeDetailRead,
     EpisodeRead,
     EpisodeUpdate,
+    MediaHierarchyRead,
     MediaTagsUpdate,
     SeasonCreate,
     SeasonRead,
     SeasonUpdate,
+    SeasonWithEpisodesRead,
     TagCreate,
     TagRead,
 )
@@ -42,6 +45,15 @@ def get_episode_or_404(db: Session, episode_id: int) -> Episode:
     if episode is None:
         raise NotFoundError("电视剧分集不存在", code="EPISODE_NOT_FOUND")
     return episode
+
+
+def load_season_with_episodes(db: Session, season_id: int) -> Season:
+    season = db.scalar(
+        select(Season).options(selectinload(Season.episodes)).where(Season.id == season_id)
+    )
+    if season is None:
+        raise NotFoundError("电视剧季不存在", code="SEASON_NOT_FOUND")
+    return season
 
 
 def commit_or_conflict(db: Session, *, code: str, message: str) -> None:
@@ -114,6 +126,29 @@ def replace_media_tags(
 
 
 @router.get(
+    "/media/{media_id}/hierarchy",
+    response_model=MediaHierarchyRead,
+    tags=["影视目录"],
+)
+def get_media_hierarchy(
+    media_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    media = db.scalar(
+        select(Media)
+        .options(selectinload(Media.seasons).selectinload(Season.episodes))
+        .where(Media.id == media_id)
+    )
+    if media is None:
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
+    return MediaHierarchyRead(
+        media_id=media.id,
+        title=media.title,
+        seasons=media.seasons,
+    )
+
+
+@router.get(
     "/media/{media_id}/seasons",
     response_model=list[SeasonRead],
     tags=["电视剧季"],
@@ -176,6 +211,18 @@ def update_season(
     )
     db.refresh(season)
     return season
+
+
+@router.get(
+    "/seasons/{season_id}",
+    response_model=SeasonWithEpisodesRead,
+    tags=["电视剧季"],
+)
+def get_season(
+    season_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    return load_season_with_episodes(db, season_id)
 
 
 @router.delete(
@@ -250,6 +297,29 @@ def update_episode(
     )
     db.refresh(episode)
     return episode
+
+
+@router.get(
+    "/episodes/{episode_id}",
+    response_model=EpisodeDetailRead,
+    tags=["电视剧分集"],
+)
+def get_episode(
+    episode_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    episode = db.scalar(
+        select(Episode).options(selectinload(Episode.season)).where(Episode.id == episode_id)
+    )
+    if episode is None:
+        raise NotFoundError("电视剧分集不存在", code="EPISODE_NOT_FOUND")
+    return EpisodeDetailRead.model_validate(
+        {
+            **EpisodeRead.model_validate(episode).model_dump(),
+            "media_id": episode.season.media_id,
+            "season_number": episode.season.season_number,
+        }
+    )
 
 
 @router.delete(

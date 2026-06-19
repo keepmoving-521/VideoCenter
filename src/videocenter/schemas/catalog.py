@@ -130,3 +130,18 @@ class EpisodeRead(BaseModel):
     thumbnail_url: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class SeasonWithEpisodesRead(SeasonRead):
+    episodes: list[EpisodeRead] = Field(default_factory=list)
+
+
+class EpisodeDetailRead(EpisodeRead):
+    media_id: int
+    season_number: int
+
+
+class MediaHierarchyRead(BaseModel):
+    media_id: int
+    title: str
+    seasons: list[SeasonWithEpisodesRead] = Field(default_factory=list)

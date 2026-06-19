@@ -19,5 +19,6 @@
 - [M01：完善影视资源字段](media-core-fields.md)
 - [M02～M08：影视状态、类型、来源与元数据字段](media-metadata-fields.md)
 - [M09～M12：海报、标签、电视剧季与分集](media-artwork-tags-seasons-episodes.md)
+- [M13：影片、季、分集关联](media-season-episode-association.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

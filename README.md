@@ -200,6 +200,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 海报、背景图、影视标签以及电视剧季/分集模型请参阅
 [影视目录层级文档](docs/media-artwork-tags-seasons-episodes.md)。
 
+影片、季和分集的关联查询请参阅
+[影片季集关联文档](docs/media-season-episode-association.md)。
+
 ## 项目结构
 
 ```text
