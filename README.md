@@ -149,42 +149,15 @@ python -m pytest
 
 ## 数据库迁移
 
-项目使用 Alembic 管理数据库结构。迁移命令会读取 `.env` 中的
-`VIDEOCENTER_DATABASE_URL`；未配置时使用 `sqlite:///./data/videocenter.db`。
+项目使用 Alembic 管理数据库结构。配置、命令、开发流程和 SQLite 注意事项请参阅
+[Alembic 数据库迁移文档](docs/database-migrations.md)。
 
-查看当前数据库版本：
-
-```powershell
-# uv
-uv run alembic current
-
-# pip 虚拟环境
-python -m alembic current
-```
-
-创建迁移文件：
-
-```powershell
-uv run alembic revision --autogenerate -m "描述本次数据库变更"
-```
-
-升级到最新版本：
-
-```powershell
-uv run alembic upgrade head
-```
-
-回退一个版本：
-
-```powershell
-uv run alembic downgrade -1
-```
-
-提交数据库模型变更时，应同时提交 `migrations/versions/` 中对应的迁移文件。
+其他迭代专题请参阅[开发文档索引](docs/README.md)。
 
 ## 项目结构
 
 ```text
+docs/              # 功能和开发专题文档
 migrations/        # Alembic 数据库迁移
 src/videocenter/
 ├── api/          # HTTP 路由与请求依赖
