@@ -2,6 +2,7 @@ from datetime import date, datetime
 from typing import Annotated
 
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -11,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from videocenter.models.media import MediaType
+from videocenter.models.media import MediaStatus, MediaType
 from videocenter.schemas.common import ApiRequestModel, PositiveId, ShortText
 
 OptionalShortText = Annotated[
@@ -24,15 +25,20 @@ ContentRating = Annotated[
 ]
 
 
-def normalize_alternative_titles(values: list[str]) -> list[str]:
+def normalize_string_list(
+    values: list[str],
+    *,
+    field_label: str,
+    item_max_length: int = 255,
+) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
     for value in values:
         stripped = value.strip()
         if not stripped:
-            raise ValueError("影视别名不能为空")
-        if len(stripped) > 255:
-            raise ValueError("影视别名长度不能超过 255 个字符")
+            raise ValueError(f"{field_label}不能为空")
+        if len(stripped) > item_max_length:
+            raise ValueError(f"{field_label}长度不能超过 {item_max_length} 个字符")
         comparison_key = stripped.casefold()
         if comparison_key not in seen:
             seen.add(comparison_key)
@@ -46,12 +52,24 @@ class MediaCreate(ApiRequestModel):
     original_title: OptionalShortText | None = None
     alternative_titles: list[str] = Field(default_factory=list, max_length=50)
     media_type: MediaType = MediaType.MOVIE
+    status: MediaStatus = MediaStatus.PENDING
     description: str | None = Field(default=None, max_length=10_000)
     release_year: int | None = Field(default=None, ge=1888, le=2100)
     release_date: date | None = None
     content_rating: ContentRating | None = None
+    source_site: OptionalShortText | None = Field(default=None, max_length=100)
+    source_page_url: HttpUrl | None = Field(
+        default=None,
+        validation_alias=AliasChoices("source_page_url", "source_url"),
+    )
+    directors: list[str] = Field(default_factory=list, max_length=100)
+    actors: list[str] = Field(default_factory=list, max_length=500)
+    regions: list[str] = Field(default_factory=list, max_length=50)
+    languages: list[str] = Field(default_factory=list, max_length=50)
+    genres: list[str] = Field(default_factory=list, max_length=50)
+    duration_minutes: int | None = Field(default=None, gt=0, le=100_000)
+    rating: float | None = Field(default=None, ge=0, le=10)
     poster_url: HttpUrl | None = None
-    source_url: HttpUrl | None = None
 
     @field_validator("description")
     @classmethod
@@ -64,7 +82,32 @@ class MediaCreate(ApiRequestModel):
     @field_validator("alternative_titles")
     @classmethod
     def validate_alternative_titles(cls, value: list[str]) -> list[str]:
-        return normalize_alternative_titles(value)
+        return normalize_string_list(value, field_label="影视别名")
+
+    @field_validator("directors")
+    @classmethod
+    def validate_directors(cls, value: list[str]) -> list[str]:
+        return normalize_string_list(value, field_label="导演")
+
+    @field_validator("actors")
+    @classmethod
+    def validate_actors(cls, value: list[str]) -> list[str]:
+        return normalize_string_list(value, field_label="演员")
+
+    @field_validator("regions")
+    @classmethod
+    def validate_regions(cls, value: list[str]) -> list[str]:
+        return normalize_string_list(value, field_label="地区", item_max_length=100)
+
+    @field_validator("languages")
+    @classmethod
+    def validate_languages(cls, value: list[str]) -> list[str]:
+        return normalize_string_list(value, field_label="语言", item_max_length=100)
+
+    @field_validator("genres")
+    @classmethod
+    def validate_genres(cls, value: list[str]) -> list[str]:
+        return normalize_string_list(value, field_label="类别", item_max_length=100)
 
     @model_validator(mode="after")
     def synchronize_release_year(self) -> "MediaCreate":
@@ -77,7 +120,7 @@ class MediaCreate(ApiRequestModel):
 
     def to_model_values(self) -> dict:
         values = self.model_dump()
-        for field in ("poster_url", "source_url"):
+        for field in ("poster_url", "source_page_url"):
             if values[field] is not None:
                 values[field] = str(values[field])
         return values
@@ -89,14 +132,36 @@ class MediaUpdate(ApiRequestModel):
     original_title: OptionalShortText | None = None
     alternative_titles: list[str] | None = Field(default=None, max_length=50)
     media_type: MediaType | None = None
+    status: MediaStatus | None = None
     description: str | None = Field(default=None, max_length=10_000)
     release_year: int | None = Field(default=None, ge=1888, le=2100)
     release_date: date | None = None
     content_rating: ContentRating | None = None
+    source_site: OptionalShortText | None = Field(default=None, max_length=100)
+    source_page_url: HttpUrl | None = Field(
+        default=None,
+        validation_alias=AliasChoices("source_page_url", "source_url"),
+    )
+    directors: list[str] | None = Field(default=None, max_length=100)
+    actors: list[str] | None = Field(default=None, max_length=500)
+    regions: list[str] | None = Field(default=None, max_length=50)
+    languages: list[str] | None = Field(default=None, max_length=50)
+    genres: list[str] | None = Field(default=None, max_length=50)
+    duration_minutes: int | None = Field(default=None, gt=0, le=100_000)
+    rating: float | None = Field(default=None, ge=0, le=10)
     poster_url: HttpUrl | None = None
-    source_url: HttpUrl | None = None
 
-    @field_validator("title", "media_type", "alternative_titles")
+    @field_validator(
+        "title",
+        "media_type",
+        "status",
+        "alternative_titles",
+        "directors",
+        "actors",
+        "regions",
+        "languages",
+        "genres",
+    )
     @classmethod
     def reject_required_field_nulls(cls, value):
         if value is None:
@@ -116,7 +181,33 @@ class MediaUpdate(ApiRequestModel):
     def validate_alternative_titles(cls, value: list[str] | None) -> list[str] | None:
         if value is None:
             return None
-        return normalize_alternative_titles(value)
+        return normalize_string_list(value, field_label="影视别名")
+
+    @field_validator("directors")
+    @classmethod
+    def validate_directors(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else normalize_string_list(value, field_label="导演")
+
+    @field_validator("actors")
+    @classmethod
+    def validate_actors(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else normalize_string_list(value, field_label="演员")
+
+    @field_validator("regions", "languages", "genres")
+    @classmethod
+    def validate_classification_lists(
+        cls,
+        value: list[str] | None,
+        info,
+    ) -> list[str] | None:
+        if value is None:
+            return None
+        labels = {"regions": "地区", "languages": "语言", "genres": "类别"}
+        return normalize_string_list(
+            value,
+            field_label=labels[info.field_name],
+            item_max_length=100,
+        )
 
     @model_validator(mode="after")
     def require_at_least_one_field(self) -> "MediaUpdate":
@@ -130,7 +221,7 @@ class MediaUpdate(ApiRequestModel):
 
     def to_model_values(self) -> dict:
         values = self.model_dump(exclude_unset=True)
-        for field in ("poster_url", "source_url"):
+        for field in ("poster_url", "source_page_url"):
             if field in values and values[field] is not None:
                 values[field] = str(values[field])
         return values
@@ -157,12 +248,21 @@ class MediaRead(BaseModel):
     original_title: str | None
     alternative_titles: list[str]
     media_type: MediaType
+    status: MediaStatus
     description: str | None
     release_year: int | None
     release_date: date | None
     content_rating: str | None
+    source_site: str | None
+    source_page_url: str | None
+    directors: list[str]
+    actors: list[str]
+    regions: list[str]
+    languages: list[str]
+    genres: list[str]
+    duration_minutes: int | None
+    rating: float | None
     poster_url: str | None
-    source_url: str | None
     created_at: datetime
     updated_at: datetime
     resources: list[LocalResourceRead] = Field(default_factory=list)

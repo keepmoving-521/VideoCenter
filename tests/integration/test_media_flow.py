@@ -22,9 +22,19 @@ def test_media_crud_flow(
                     " integration alias ",
                     "第二片名",
                 ],
-                "media_type": "movie",
+                "media_type": "documentary",
+                "status": "available",
                 "release_date": "2024-05-20",
                 "content_rating": "PG-13",
+                "source_site": "Example Video",
+                "source_page_url": "https://example.com/videos/integration",
+                "directors": ["Director One", " director one "],
+                "actors": ["Actor One", "Actor Two"],
+                "regions": ["中国大陆", "China"],
+                "languages": ["汉语普通话", "English"],
+                "genres": ["纪录片", "Technology"],
+                "duration_minutes": 95,
+                "rating": 8.6,
             },
         ),
         201,
@@ -36,6 +46,17 @@ def test_media_crud_flow(
     assert created["release_date"] == "2024-05-20"
     assert created["release_year"] == 2024
     assert created["content_rating"] == "PG-13"
+    assert created["media_type"] == "documentary"
+    assert created["status"] == "available"
+    assert created["source_site"] == "Example Video"
+    assert created["source_page_url"] == "https://example.com/videos/integration"
+    assert created["directors"] == ["Director One"]
+    assert created["actors"] == ["Actor One", "Actor Two"]
+    assert created["regions"] == ["中国大陆", "China"]
+    assert created["languages"] == ["汉语普通话", "English"]
+    assert created["genres"] == ["纪录片", "Technology"]
+    assert created["duration_minutes"] == 95
+    assert created["rating"] == 8.6
 
     listed = api_assertions.assert_status(
         api_client.get("/api/v1/media", params={"query": "Integration"}),
@@ -51,6 +72,8 @@ def test_media_crud_flow(
                 "title": "Updated Integration Movie",
                 "alternative_titles": ["Updated Alias"],
                 "release_date": "2025-01-01",
+                "status": "archived",
+                "rating": 9.1,
             },
         ),
         200,
@@ -59,6 +82,8 @@ def test_media_crud_flow(
     assert updated["title"] == "Updated Integration Movie"
     assert updated["alternative_titles"] == ["Updated Alias"]
     assert updated["release_year"] == 2025
+    assert updated["status"] == "archived"
+    assert updated["rating"] == 9.1
 
     api_assertions.assert_status(
         api_client.delete(f"/api/v1/media/{media_id}"),

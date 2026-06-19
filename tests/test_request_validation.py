@@ -76,6 +76,52 @@ def test_media_model_values_preserve_python_date_and_serialize_urls():
     assert values["poster_url"] == "https://example.com/poster.jpg"
 
 
+def test_media_extended_fields_are_normalized():
+    payload = MediaCreate(
+        title="Movie",
+        source_site=" Example Site ",
+        source_page_url="https://example.com/movie",
+        directors=[" Director ", "director"],
+        actors=[" Actor One ", "Actor Two"],
+        regions=[" China ", "china"],
+        languages=[" Chinese ", "English"],
+        genres=[" Drama ", "drama"],
+        duration_minutes=120,
+        rating=8.5,
+    )
+
+    assert payload.source_site == "Example Site"
+    assert payload.directors == ["Director"]
+    assert payload.actors == ["Actor One", "Actor Two"]
+    assert payload.regions == ["China"]
+    assert payload.languages == ["Chinese", "English"]
+    assert payload.genres == ["Drama"]
+    assert payload.duration_minutes == 120
+    assert payload.rating == 8.5
+
+
+def test_legacy_media_source_url_alias_is_accepted():
+    payload = MediaCreate(
+        title="Movie",
+        source_url="https://example.com/legacy-page",
+    )
+
+    assert str(payload.source_page_url) == "https://example.com/legacy-page"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("duration_minutes", 0),
+        ("rating", -0.1),
+        ("rating", 10.1),
+    ],
+)
+def test_media_duration_and_rating_ranges(field, value):
+    with pytest.raises(ValidationError):
+        MediaCreate(title="Movie", **{field: value})
+
+
 def test_release_year_must_match_release_date():
     with pytest.raises(ValidationError, match="上映年份必须与上映日期的年份一致"):
         MediaCreate(

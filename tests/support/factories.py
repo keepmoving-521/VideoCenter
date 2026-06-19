@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from videocenter.models.download import DownloadStatus, DownloadTask
 from videocenter.models.history import WatchHistory
-from videocenter.models.media import LocalResource, Media, MediaType
+from videocenter.models.media import LocalResource, Media, MediaStatus, MediaType
 
 
 class ModelFactory:
@@ -17,6 +17,12 @@ class ModelFactory:
             "title": f"Test media {uuid4().hex[:8]}",
             "alternative_titles": [],
             "media_type": MediaType.MOVIE,
+            "status": MediaStatus.PENDING,
+            "directors": [],
+            "actors": [],
+            "regions": [],
+            "languages": [],
+            "genres": [],
         }
         values.update(overrides)
         return self._save(Media(**values))

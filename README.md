@@ -194,6 +194,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 影视排序标题、别名、上映日期和内容分级字段请参阅
 [影视资源核心字段文档](docs/media-core-fields.md)。
 
+影视状态、类型、来源、演职员、分类、时长与评分字段请参阅
+[影视元数据字段文档](docs/media-metadata-fields.md)。
+
 ## 项目结构
 
 ```text

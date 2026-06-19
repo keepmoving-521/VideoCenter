@@ -55,7 +55,7 @@ task_id > 0
 - `original_title`：非空时长度为 1～255；
 - `description`：最大 10000 字符，纯空格转换为空值；
 - `release_year`：1888～2100；
-- `poster_url`、`source_url`：仅接受 HTTP/HTTPS URL；
+- `poster_url`、`source_page_url`：仅接受 HTTP/HTTPS URL；
 - 未声明字段直接拒绝。
 
 ### 更新影视
