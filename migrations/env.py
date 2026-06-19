@@ -1,22 +1,17 @@
-from logging.config import fileConfig
-
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from videocenter.core.config import get_settings
 from videocenter.core.database import Base
+from videocenter.core.logging import configure_logging
 from videocenter.models import DownloadTask, LocalResource, Media, WatchHistory  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
 settings = get_settings()
+configure_logging(settings)
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 

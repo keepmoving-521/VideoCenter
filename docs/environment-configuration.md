@@ -130,6 +130,9 @@ VIDEOCENTER_DOCS_ENABLED=true
 | `VIDEOCENTER_APP_NAME` | 应用名称 |
 | `VIDEOCENTER_DEBUG` | FastAPI 调试模式 |
 | `VIDEOCENTER_LOG_LEVEL` | 日志级别 |
+| `VIDEOCENTER_LOG_FORMAT` | 文本或 JSON 日志格式 |
+| `VIDEOCENTER_LOG_FILE_ENABLED` | 是否输出日志文件 |
+| `VIDEOCENTER_LOG_DIR` | 日志文件目录 |
 | `VIDEOCENTER_DOCS_ENABLED` | 是否开放 API 文档 |
 | `VIDEOCENTER_DATABASE_ECHO` | 是否输出 SQLAlchemy SQL |
 | `VIDEOCENTER_DATABASE_URL` | 数据库连接地址 |
@@ -171,3 +174,5 @@ GET /
 ```
 
 生产环境关闭文档时，`docs` 返回 `null`。
+
+日志相关配置详见[统一日志配置](logging-configuration.md)。

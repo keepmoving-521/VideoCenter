@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -5,14 +6,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from videocenter.api.router import api_router
 from videocenter.core.config import get_settings
+from videocenter.core.logging import configure_logging
 
 settings = get_settings()
+configure_logging(settings)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings.media_root.mkdir(parents=True, exist_ok=True)
+    logger.info("Application started")
     yield
+    logger.info("Application stopped")
 
 
 app = FastAPI(

@@ -13,6 +13,11 @@ class AppEnvironment(StrEnum):
     PRODUCTION = "production"
 
 
+class LogFormat(StrEnum):
+    TEXT = "text"
+    JSON = "json"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="VIDEOCENTER_",
@@ -23,6 +28,12 @@ class Settings(BaseSettings):
     app_name: str = "VideoCenter"
     debug: bool = False
     log_level: str = "INFO"
+    log_format: LogFormat = LogFormat.TEXT
+    log_file_enabled: bool = True
+    log_dir: Path = Path("./data/logs")
+    log_file_name: str = "videocenter.log"
+    log_max_bytes: int = 10 * 1024 * 1024
+    log_backup_count: int = 5
     docs_enabled: bool = True
     database_echo: bool = False
     database_url: str = "sqlite:///./data/videocenter.db"
@@ -30,9 +41,9 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
-    @field_validator("media_root", mode="after")
+    @field_validator("media_root", "log_dir", mode="after")
     @classmethod
-    def resolve_media_root(cls, value: Path) -> Path:
+    def resolve_path(cls, value: Path) -> Path:
         return value.expanduser().resolve()
 
     @field_validator("api_prefix")
@@ -49,6 +60,20 @@ class Settings(BaseSettings):
         if normalized not in {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}:
             raise ValueError("Unsupported log level")
         return normalized
+
+    @field_validator("log_file_name")
+    @classmethod
+    def validate_log_file_name(cls, value: str) -> str:
+        if not value or Path(value).name != value:
+            raise ValueError("Log file name must not contain a directory")
+        return value
+
+    @field_validator("log_max_bytes", "log_backup_count")
+    @classmethod
+    def validate_positive_log_rotation_value(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("Log rotation values must be greater than zero")
+        return value
 
     @model_validator(mode="after")
     def validate_environment_safety(self) -> "Settings":

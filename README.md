@@ -162,6 +162,9 @@ python -m pytest
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅
 [多环境配置文档](docs/environment-configuration.md)。
 
+统一日志格式、文件轮转和各环境建议请参阅
+[日志配置文档](docs/logging-configuration.md)。
+
 ## 项目结构
 
 ```text
