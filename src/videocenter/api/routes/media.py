@@ -1,0 +1,62 @@
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session, selectinload
+
+from videocenter.core.database import get_db
+from videocenter.models.media import Media
+from videocenter.schemas.media import MediaCreate, MediaRead, MediaUpdate
+
+router = APIRouter()
+
+
+@router.get("", response_model=list[MediaRead])
+def list_media(
+    query: str | None = Query(default=None, max_length=100),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    statement = select(Media).options(selectinload(Media.resources))
+    if query:
+        statement = statement.where(
+            or_(Media.title.contains(query), Media.original_title.contains(query))
+        )
+    return db.scalars(statement.offset(offset).limit(limit).order_by(Media.id.desc())).all()
+
+
+@router.post("", response_model=MediaRead, status_code=status.HTTP_201_CREATED)
+def create_media(payload: MediaCreate, db: Session = Depends(get_db)):
+    media = Media(**payload.model_dump(mode="json"))
+    db.add(media)
+    db.commit()
+    return get_media(media.id, db)
+
+
+@router.get("/{media_id}", response_model=MediaRead)
+def get_media(media_id: int, db: Session = Depends(get_db)):
+    media = db.scalar(
+        select(Media).options(selectinload(Media.resources)).where(Media.id == media_id)
+    )
+    if not media:
+        raise HTTPException(status_code=404, detail="影视条目不存在")
+    return media
+
+
+@router.patch("/{media_id}", response_model=MediaRead)
+def update_media(media_id: int, payload: MediaUpdate, db: Session = Depends(get_db)):
+    media = db.get(Media, media_id)
+    if not media:
+        raise HTTPException(status_code=404, detail="影视条目不存在")
+    for field, value in payload.model_dump(exclude_unset=True, mode="json").items():
+        setattr(media, field, value)
+    db.commit()
+    return get_media(media_id, db)
+
+
+@router.delete("/{media_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_media(media_id: int, db: Session = Depends(get_db)) -> None:
+    media = db.get(Media, media_id)
+    if not media:
+        raise HTTPException(status_code=404, detail="影视条目不存在")
+    db.delete(media)
+    db.commit()

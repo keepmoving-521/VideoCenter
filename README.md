@@ -1,2 +1,127 @@
 # VideoCenter
-为了方便个人管理和观看网络上的影视资源，开发一套轻量级影视资源管理系统。  系统支持用户输入影视资源页面地址，自动解析影片信息，下载视频文件到本地，并提供在线播放、历史记录和资源管理功能。  本系统仅供个人学习和使用，不涉及用户注册、会员收费、资源分享等功能。
+
+VideoCenter 是一个面向个人使用的轻量级影视库后端，用于统一管理影视条目、下载任务、本地视频、在线播放进度和观看历史。
+
+## 当前能力
+
+- 影视条目增删改查与搜索
+- HTTP/HTTPS 直链后台下载、进度查询和任务取消
+- 扫描本地媒体目录并登记视频文件
+- 支持 HTTP Range 的视频流播放
+- 保存播放进度和观看历史
+- SQLite 本地数据库与自动生成的 OpenAPI 文档
+
+> 请只下载和管理你有权使用的内容。当前下载器仅处理直接媒体文件链接，后续可以通过 `DownloadProvider` 接口接入 yt-dlp、Aria2 等实现。
+
+## 快速开始
+
+要求 Python 3.12+，项目使用 `uv.lock` 固定实际安装的依赖版本。
+
+首次安装 `uv`：
+
+```powershell
+python -m pip install uv
+```
+
+创建虚拟环境并严格按照锁文件安装开发依赖：
+
+```powershell
+uv sync --extra dev --frozen
+Copy-Item .env.example .env
+uv run uvicorn videocenter.main:app --reload
+```
+
+打开：
+
+- API 文档：http://127.0.0.1:8000/docs
+- 健康检查：http://127.0.0.1:8000/api/v1/health
+
+运行测试：
+
+```powershell
+uv run pytest
+```
+
+## 依赖与锁文件
+
+`pyproject.toml` 声明允许使用的依赖版本范围，`uv.lock` 记录解析后的精确版本。两者都应提交到 Git。
+
+添加运行依赖：
+
+```powershell
+uv add 包名
+```
+
+添加开发依赖：
+
+```powershell
+uv add --optional dev 包名
+```
+
+修改 `pyproject.toml` 后更新锁文件和本地环境：
+
+```powershell
+uv lock
+uv sync --extra dev
+```
+
+升级全部允许升级的依赖：
+
+```powershell
+uv lock --upgrade
+uv sync --extra dev
+```
+
+只升级一个依赖：
+
+```powershell
+uv lock --upgrade-package fastapi
+uv sync --extra dev
+```
+
+CI 或生产部署应使用 `--frozen`，确保配置和锁文件不一致时直接失败：
+
+```powershell
+# 生产环境
+uv sync --frozen --no-dev
+
+# CI 测试环境
+uv sync --frozen --extra dev
+uv run pytest
+```
+
+## 项目结构
+
+```text
+src/videocenter/
+├── api/          # HTTP 路由与请求依赖
+├── core/         # 配置、数据库和日志
+├── models/       # 数据库实体
+├── schemas/      # API 输入输出模型
+├── services/     # 下载、媒体扫描、播放等业务逻辑
+└── main.py       # 应用入口
+```
+
+默认运行数据写入 `data/`，下载文件保存在 `data/media/`。这些目录不会提交到 Git。
+
+## 主要接口
+
+| 模块 | 接口 |
+| --- | --- |
+| 健康检查 | `GET /api/v1/health` |
+| 影视库 | `GET/POST /api/v1/media` |
+| 影视详情 | `GET/PATCH/DELETE /api/v1/media/{id}` |
+| 下载任务 | `GET/POST /api/v1/downloads` |
+| 取消下载 | `POST /api/v1/downloads/{id}/cancel` |
+| 本地扫描 | `POST /api/v1/local-resources/scan` |
+| 本地资源 | `GET /api/v1/local-resources` |
+| 视频播放 | `GET /api/v1/stream/{resource_id}` |
+| 观看历史 | `GET/PUT /api/v1/history` |
+
+## 下一阶段建议
+
+1. 增加 Web 管理界面。
+2. 接入 FFmpeg 获取时长、分辨率和封面。
+3. 接入可选的 yt-dlp/Aria2 下载提供器。
+4. 增加影片元数据抓取、标签、合集与字幕管理。
+5. 当系统不再仅限本机使用时，增加身份认证和访问控制。
