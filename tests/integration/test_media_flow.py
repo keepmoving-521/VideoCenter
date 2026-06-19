@@ -15,14 +15,27 @@ def test_media_crud_flow(
             "/api/v1/media",
             json={
                 "title": "Integration Movie",
+                "sort_title": "Integration Movie, The",
+                "original_title": "Integration Original",
+                "alternative_titles": [
+                    "Integration Alias",
+                    " integration alias ",
+                    "第二片名",
+                ],
                 "media_type": "movie",
-                "release_year": 2024,
+                "release_date": "2024-05-20",
+                "content_rating": "PG-13",
             },
         ),
         201,
     )
     assert created is not None
     media_id = created["id"]
+    assert created["sort_title"] == "Integration Movie, The"
+    assert created["alternative_titles"] == ["Integration Alias", "第二片名"]
+    assert created["release_date"] == "2024-05-20"
+    assert created["release_year"] == 2024
+    assert created["content_rating"] == "PG-13"
 
     listed = api_assertions.assert_status(
         api_client.get("/api/v1/media", params={"query": "Integration"}),
@@ -34,12 +47,18 @@ def test_media_crud_flow(
     updated = api_assertions.assert_status(
         api_client.patch(
             f"/api/v1/media/{media_id}",
-            json={"title": "Updated Integration Movie"},
+            json={
+                "title": "Updated Integration Movie",
+                "alternative_titles": ["Updated Alias"],
+                "release_date": "2025-01-01",
+            },
         ),
         200,
     )
     assert updated is not None
     assert updated["title"] == "Updated Integration Movie"
+    assert updated["alternative_titles"] == ["Updated Alias"]
+    assert updated["release_year"] == 2025
 
     api_assertions.assert_status(
         api_client.delete(f"/api/v1/media/{media_id}"),

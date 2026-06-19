@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from videocenter.core.database import Base
@@ -18,12 +18,20 @@ class Media(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(255), index=True)
+    sort_title: Mapped[str | None] = mapped_column(String(255), index=True)
     original_title: Mapped[str | None] = mapped_column(String(255))
+    alternative_titles: Mapped[list[str]] = mapped_column(
+        JSON,
+        default=list,
+        server_default="[]",
+    )
     media_type: Mapped[MediaType] = mapped_column(
         Enum(MediaType), default=MediaType.MOVIE, index=True
     )
     description: Mapped[str | None] = mapped_column(Text)
     release_year: Mapped[int | None] = mapped_column(Integer)
+    release_date: Mapped[date | None] = mapped_column(Date)
+    content_rating: Mapped[str | None] = mapped_column(String(32))
     poster_url: Mapped[str | None] = mapped_column(String(2048))
     source_url: Mapped[str | None] = mapped_column(String(2048))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

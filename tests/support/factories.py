@@ -15,6 +15,7 @@ class ModelFactory:
     def media(self, **overrides) -> Media:
         values = {
             "title": f"Test media {uuid4().hex[:8]}",
+            "alternative_titles": [],
             "media_type": MediaType.MOVIE,
         }
         values.update(overrides)

@@ -191,6 +191,9 @@ API 客户端、数据工厂、响应断言和集成测试标记请参阅
 GitHub Actions 自动检查、测试与覆盖率流程请参阅
 [GitHub Actions 文档](docs/github-actions.md)。
 
+影视排序标题、别名、上映日期和内容分级字段请参阅
+[影视资源核心字段文档](docs/media-core-fields.md)。
+
 ## 项目结构
 
 ```text

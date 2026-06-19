@@ -32,7 +32,7 @@ def list_media(
 
 @router.post("", response_model=MediaRead, status_code=status.HTTP_201_CREATED)
 def create_media(payload: MediaCreate, db: Session = Depends(get_db)):
-    media = Media(**payload.model_dump(mode="json"))
+    media = Media(**payload.to_model_values())
     db.add(media)
     db.commit()
     return get_media(media.id, db)
@@ -60,7 +60,7 @@ def update_media(
     media = db.get(Media, media_id)
     if not media:
         raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
-    for field, value in payload.model_dump(exclude_unset=True, mode="json").items():
+    for field, value in payload.to_model_values().items():
         setattr(media, field, value)
     db.commit()
     return get_media(media_id, db)
