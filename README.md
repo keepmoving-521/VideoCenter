@@ -183,6 +183,9 @@ API 客户端、数据工厂、响应断言和集成测试标记请参阅
 统一 Ruff lint、格式检查和自动修复用法请参阅
 [Ruff 代码检查文档](docs/ruff-code-check.md)。
 
+提交前自动文件检查和 Ruff hooks 的安装方式请参阅
+[pre-commit 配置文档](docs/pre-commit.md)。
+
 ## 项目结构
 
 ```text

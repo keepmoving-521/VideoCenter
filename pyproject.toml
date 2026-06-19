@@ -19,10 +19,13 @@ dependencies = [
 
 [project.scripts]
 videocenter-lint = "videocenter.quality:main"
+videocenter-hooks-install = "videocenter.hooks:install"
+videocenter-hooks-run = "videocenter.hooks:run_all"
 
 [project.optional-dependencies]
 dev = [
     "httpx>=0.28,<1.0",
+    "pre-commit>=4.0,<5.0",
     "pytest>=8.3,<9.0",
     "pytest-cov>=6.0,<7.0",
     "ruff>=0.9,<1.0",

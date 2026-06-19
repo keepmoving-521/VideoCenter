@@ -14,5 +14,6 @@
 - [B08：测试专用数据库](testing-database.md)
 - [B09：API 集成测试框架](api-integration-testing.md)
 - [B10：Ruff 代码检查命令](ruff-code-check.md)
+- [B11：pre-commit 配置](pre-commit.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。
