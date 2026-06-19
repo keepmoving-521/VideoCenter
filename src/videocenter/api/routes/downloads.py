@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
+from videocenter.core.exceptions import BadRequestError, NotFoundError
 from videocenter.models.download import DownloadTask
 from videocenter.models.media import Media
 from videocenter.schemas.download import DownloadCreate, DownloadRead
@@ -19,11 +20,11 @@ def list_downloads(db: Session = Depends(get_db)):
 @router.post("", response_model=DownloadRead, status_code=status.HTTP_202_ACCEPTED)
 def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
     if payload.media_id is not None and not db.get(Media, payload.media_id):
-        raise HTTPException(status_code=404, detail="影视条目不存在")
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
     try:
         target_name = safe_target_name(payload.target_name)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise BadRequestError(str(exc), code="INVALID_TARGET_NAME") from exc
     task = DownloadTask(
         media_id=payload.media_id,
         source_url=str(payload.source_url),
@@ -40,7 +41,7 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
 def get_download(task_id: int, db: Session = Depends(get_db)):
     task = db.get(DownloadTask, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="下载任务不存在")
+        raise NotFoundError("下载任务不存在", code="DOWNLOAD_TASK_NOT_FOUND")
     return task
 
 
@@ -48,5 +49,5 @@ def get_download(task_id: int, db: Session = Depends(get_db)):
 def cancel(task_id: int, db: Session = Depends(get_db)):
     task = db.get(DownloadTask, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="下载任务不存在")
+        raise NotFoundError("下载任务不存在", code="DOWNLOAD_TASK_NOT_FOUND")
     return cancel_download(db, task)

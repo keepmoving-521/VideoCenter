@@ -1,10 +1,11 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
+from videocenter.core.exceptions import AppException, NotFoundError
 from videocenter.models.media import LocalResource
 from videocenter.services.streaming import iter_file_range, parse_range_header
 
@@ -19,18 +20,19 @@ def stream_video(
 ):
     resource = db.get(LocalResource, resource_id)
     if not resource:
-        raise HTTPException(status_code=404, detail="本地资源不存在")
+        raise NotFoundError("本地资源不存在", code="LOCAL_RESOURCE_NOT_FOUND")
     path = Path(resource.file_path)
     if not path.is_file():
-        raise HTTPException(status_code=404, detail="视频文件已丢失")
+        raise NotFoundError("视频文件已丢失", code="VIDEO_FILE_MISSING")
 
     file_size = path.stat().st_size
     try:
         byte_range = parse_range_header(range_header, file_size)
     except (ValueError, TypeError):
-        raise HTTPException(
+        raise AppException(
+            "无效的 Range 请求",
             status_code=416,
-            detail="无效的 Range 请求",
+            code="INVALID_BYTE_RANGE",
             headers={"Content-Range": f"bytes */{file_size}"},
         ) from None
 

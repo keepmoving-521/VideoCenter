@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from videocenter.core.database import get_db
+from videocenter.core.exceptions import NotFoundError
 from videocenter.models.media import Media
 from videocenter.schemas.media import MediaCreate, MediaRead, MediaUpdate
 
@@ -38,7 +39,7 @@ def get_media(media_id: int, db: Session = Depends(get_db)):
         select(Media).options(selectinload(Media.resources)).where(Media.id == media_id)
     )
     if not media:
-        raise HTTPException(status_code=404, detail="影视条目不存在")
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
     return media
 
 
@@ -46,7 +47,7 @@ def get_media(media_id: int, db: Session = Depends(get_db)):
 def update_media(media_id: int, payload: MediaUpdate, db: Session = Depends(get_db)):
     media = db.get(Media, media_id)
     if not media:
-        raise HTTPException(status_code=404, detail="影视条目不存在")
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
     for field, value in payload.model_dump(exclude_unset=True, mode="json").items():
         setattr(media, field, value)
     db.commit()
@@ -57,6 +58,6 @@ def update_media(media_id: int, payload: MediaUpdate, db: Session = Depends(get_
 def delete_media(media_id: int, db: Session = Depends(get_db)) -> None:
     media = db.get(Media, media_id)
     if not media:
-        raise HTTPException(status_code=404, detail="影视条目不存在")
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
     db.delete(media)
     db.commit()

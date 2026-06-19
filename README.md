@@ -165,6 +165,9 @@ python -m pytest
 统一日志格式、文件轮转和各环境建议请参阅
 [日志配置文档](docs/logging-configuration.md)。
 
+业务异常、参数校验和服务端错误处理请参阅
+[统一异常处理文档](docs/exception-handling.md)。
+
 ## 项目结构
 
 ```text

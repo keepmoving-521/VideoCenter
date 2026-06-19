@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from videocenter.api.exception_handlers import register_exception_handlers
 from videocenter.api.router import api_router
 from videocenter.core.config import get_settings
 from videocenter.core.logging import configure_logging
@@ -38,6 +39,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+register_exception_handlers(app, settings)
 app.include_router(api_router, prefix=settings.api_prefix)
 
 
