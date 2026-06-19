@@ -197,6 +197,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 影视状态、类型、来源、演职员、分类、时长与评分字段请参阅
 [影视元数据字段文档](docs/media-metadata-fields.md)。
 
+海报、背景图、影视标签以及电视剧季/分集模型请参阅
+[影视目录层级文档](docs/media-artwork-tags-seasons-episodes.md)。
+
 ## 项目结构
 
 ```text

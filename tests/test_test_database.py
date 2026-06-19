@@ -10,8 +10,12 @@ from videocenter.models.media import Media
 EXPECTED_TABLES = {
     "alembic_version",
     "download_tasks",
+    "episodes",
     "local_resources",
     "media",
+    "media_tags",
+    "seasons",
+    "tags",
     "watch_history",
 }
 

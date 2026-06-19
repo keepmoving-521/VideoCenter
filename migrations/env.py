@@ -4,7 +4,15 @@ from sqlalchemy import engine_from_config, pool
 from videocenter.core.config import get_settings
 from videocenter.core.database import Base
 from videocenter.core.logging import configure_logging
-from videocenter.models import DownloadTask, LocalResource, Media, WatchHistory  # noqa: F401
+from videocenter.models import (  # noqa: F401
+    DownloadTask,
+    Episode,
+    LocalResource,
+    Media,
+    Season,
+    Tag,
+    WatchHistory,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -6,6 +6,13 @@ from pydantic import ValidationError
 
 from tests.support.api import ApiAssertions
 from videocenter.main import app
+from videocenter.schemas.catalog import (
+    EpisodeCreate,
+    EpisodeUpdate,
+    MediaTagsUpdate,
+    SeasonCreate,
+    SeasonUpdate,
+)
 from videocenter.schemas.download import DownloadCreate
 from videocenter.schemas.history import HistoryUpsert
 from videocenter.schemas.media import MediaCreate
@@ -68,12 +75,32 @@ def test_media_model_values_preserve_python_date_and_serialize_urls():
         title="Movie",
         release_date="2024-05-20",
         poster_url="https://example.com/poster.jpg",
+        background_url="https://example.com/background.jpg",
     )
 
     values = payload.to_model_values()
 
     assert values["release_date"] == date(2024, 5, 20)
     assert values["poster_url"] == "https://example.com/poster.jpg"
+    assert values["background_url"] == "https://example.com/background.jpg"
+
+
+def test_catalog_payload_validation_and_normalization():
+    tags = MediaTagsUpdate(tag_ids=[2, 1, 2])
+    assert tags.tag_ids == [2, 1]
+
+    with pytest.raises(ValidationError):
+        SeasonCreate(season_number=-1)
+    with pytest.raises(ValidationError):
+        EpisodeCreate(episode_number=0, title="Pilot")
+    with pytest.raises(ValidationError):
+        EpisodeCreate(episode_number=1, title="Pilot", duration_minutes=0)
+    with pytest.raises(ValidationError):
+        SeasonUpdate()
+    with pytest.raises(ValidationError):
+        EpisodeUpdate()
+    with pytest.raises(ValidationError):
+        EpisodeUpdate(title=None)
 
 
 def test_media_extended_fields_are_normalized():

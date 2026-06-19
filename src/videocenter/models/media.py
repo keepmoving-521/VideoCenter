@@ -4,6 +4,7 @@ from enum import StrEnum
 from sqlalchemy import (
     JSON,
     CheckConstraint,
+    Column,
     Date,
     DateTime,
     Enum,
@@ -11,7 +12,9 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Table,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -35,6 +38,22 @@ class MediaStatus(StrEnum):
     AVAILABLE = "available"
     MISSING = "missing"
     ARCHIVED = "archived"
+
+
+media_tags = Table(
+    "media_tags",
+    Base.metadata,
+    Column(
+        "media_id",
+        ForeignKey("media.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "tag_id",
+        ForeignKey("tags.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 
 class Media(Base):
@@ -82,6 +101,7 @@ class Media(Base):
     duration_minutes: Mapped[int | None] = mapped_column(Integer)
     rating: Mapped[float | None] = mapped_column(Float)
     poster_url: Mapped[str | None] = mapped_column(String(2048))
+    background_url: Mapped[str | None] = mapped_column(String(2048))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -90,6 +110,98 @@ class Media(Base):
     resources: Mapped[list["LocalResource"]] = relationship(
         back_populates="media", cascade="all, delete-orphan"
     )
+    tags: Mapped[list["Tag"]] = relationship(
+        secondary=media_tags,
+        back_populates="media_items",
+        order_by="Tag.name",
+    )
+    seasons: Mapped[list["Season"]] = relationship(
+        back_populates="media",
+        cascade="all, delete-orphan",
+        order_by="Season.season_number",
+    )
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    normalized_name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    media_items: Mapped[list[Media]] = relationship(
+        secondary=media_tags,
+        back_populates="tags",
+    )
+
+
+class Season(Base):
+    __tablename__ = "seasons"
+    __table_args__ = (
+        UniqueConstraint("media_id", "season_number", name="uq_season_media_number"),
+        CheckConstraint("season_number >= 0", name="ck_season_number_non_negative"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    media_id: Mapped[int] = mapped_column(
+        ForeignKey("media.id", ondelete="CASCADE"),
+        index=True,
+    )
+    season_number: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str | None] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text)
+    poster_url: Mapped[str | None] = mapped_column(String(2048))
+    air_date: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    media: Mapped[Media] = relationship(back_populates="seasons")
+    episodes: Mapped[list["Episode"]] = relationship(
+        back_populates="season",
+        cascade="all, delete-orphan",
+        order_by="Episode.episode_number",
+    )
+
+
+class Episode(Base):
+    __tablename__ = "episodes"
+    __table_args__ = (
+        UniqueConstraint(
+            "season_id",
+            "episode_number",
+            name="uq_episode_season_number",
+        ),
+        CheckConstraint("episode_number > 0", name="ck_episode_number_positive"),
+        CheckConstraint(
+            "duration_minutes IS NULL OR duration_minutes > 0",
+            name="ck_episode_duration_positive",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    season_id: Mapped[int] = mapped_column(
+        ForeignKey("seasons.id", ondelete="CASCADE"),
+        index=True,
+    )
+    episode_number: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text)
+    air_date: Mapped[date | None] = mapped_column(Date)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    thumbnail_url: Mapped[str | None] = mapped_column(String(2048))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    season: Mapped[Season] = relationship(back_populates="episodes")
 
 
 class LocalResource(Base):

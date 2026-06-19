@@ -22,7 +22,10 @@ def list_media(
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
-    statement = select(Media).options(selectinload(Media.resources))
+    statement = select(Media).options(
+        selectinload(Media.resources),
+        selectinload(Media.tags),
+    )
     if query:
         statement = statement.where(
             or_(Media.title.contains(query), Media.original_title.contains(query))
@@ -44,7 +47,12 @@ def get_media(
     db: Session = Depends(get_db),
 ):
     media = db.scalar(
-        select(Media).options(selectinload(Media.resources)).where(Media.id == media_id)
+        select(Media)
+        .options(
+            selectinload(Media.resources),
+            selectinload(Media.tags),
+        )
+        .where(Media.id == media_id)
     )
     if not media:
         raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")

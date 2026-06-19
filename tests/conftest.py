@@ -25,7 +25,15 @@ from tests.support.api import ApiAssertions  # noqa: E402
 from tests.support.factories import ModelFactory  # noqa: E402
 from videocenter.core.database import Base, SessionLocal, engine  # noqa: E402
 from videocenter.main import app  # noqa: E402
-from videocenter.models import DownloadTask, LocalResource, Media, WatchHistory  # noqa: E402, F401
+from videocenter.models import (  # noqa: E402, F401
+    DownloadTask,
+    Episode,
+    LocalResource,
+    Media,
+    Season,
+    Tag,
+    WatchHistory,
+)
 
 
 def assert_safe_test_database() -> None:

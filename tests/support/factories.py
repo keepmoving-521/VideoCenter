@@ -5,7 +5,15 @@ from sqlalchemy.orm import Session
 
 from videocenter.models.download import DownloadStatus, DownloadTask
 from videocenter.models.history import WatchHistory
-from videocenter.models.media import LocalResource, Media, MediaStatus, MediaType
+from videocenter.models.media import (
+    Episode,
+    LocalResource,
+    Media,
+    MediaStatus,
+    MediaType,
+    Season,
+    Tag,
+)
 
 
 class ModelFactory:
@@ -43,6 +51,43 @@ class ModelFactory:
         }
         values.update(overrides)
         return self._save(LocalResource(**values))
+
+    def tag(self, **overrides) -> Tag:
+        name = overrides.pop("name", f"Tag {uuid4().hex[:8]}")
+        values = {
+            "name": name,
+            "normalized_name": name.casefold(),
+        }
+        values.update(overrides)
+        return self._save(Tag(**values))
+
+    def season(
+        self,
+        *,
+        media: Media,
+        **overrides,
+    ) -> Season:
+        values = {
+            "media_id": media.id,
+            "season_number": 1,
+            "title": "Season 1",
+        }
+        values.update(overrides)
+        return self._save(Season(**values))
+
+    def episode(
+        self,
+        *,
+        season: Season,
+        **overrides,
+    ) -> Episode:
+        values = {
+            "season_id": season.id,
+            "episode_number": 1,
+            "title": "Episode 1",
+        }
+        values.update(overrides)
+        return self._save(Episode(**values))
 
     def download_task(
         self,

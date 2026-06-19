@@ -13,6 +13,7 @@ from pydantic import (
 )
 
 from videocenter.models.media import MediaStatus, MediaType
+from videocenter.schemas.catalog import TagRead
 from videocenter.schemas.common import ApiRequestModel, PositiveId, ShortText
 
 OptionalShortText = Annotated[
@@ -70,6 +71,7 @@ class MediaCreate(ApiRequestModel):
     duration_minutes: int | None = Field(default=None, gt=0, le=100_000)
     rating: float | None = Field(default=None, ge=0, le=10)
     poster_url: HttpUrl | None = None
+    background_url: HttpUrl | None = None
 
     @field_validator("description")
     @classmethod
@@ -120,7 +122,7 @@ class MediaCreate(ApiRequestModel):
 
     def to_model_values(self) -> dict:
         values = self.model_dump()
-        for field in ("poster_url", "source_page_url"):
+        for field in ("poster_url", "background_url", "source_page_url"):
             if values[field] is not None:
                 values[field] = str(values[field])
         return values
@@ -150,6 +152,7 @@ class MediaUpdate(ApiRequestModel):
     duration_minutes: int | None = Field(default=None, gt=0, le=100_000)
     rating: float | None = Field(default=None, ge=0, le=10)
     poster_url: HttpUrl | None = None
+    background_url: HttpUrl | None = None
 
     @field_validator(
         "title",
@@ -221,7 +224,7 @@ class MediaUpdate(ApiRequestModel):
 
     def to_model_values(self) -> dict:
         values = self.model_dump(exclude_unset=True)
-        for field in ("poster_url", "source_page_url"):
+        for field in ("poster_url", "background_url", "source_page_url"):
             if field in values and values[field] is not None:
                 values[field] = str(values[field])
         return values
@@ -263,9 +266,11 @@ class MediaRead(BaseModel):
     duration_minutes: int | None
     rating: float | None
     poster_url: str | None
+    background_url: str | None
     created_at: datetime
     updated_at: datetime
     resources: list[LocalResourceRead] = Field(default_factory=list)
+    tags: list[TagRead] = Field(default_factory=list)
 
 
 class LocalScanRequest(ApiRequestModel):
