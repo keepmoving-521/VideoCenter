@@ -13,9 +13,8 @@ def test_openapi_uses_standard_error_response_schema():
     assert "ErrorResponse" in schema["components"]["schemas"]
 
 
-def test_success_response_also_contains_request_id_header():
-    with TestClient(app) as client:
-        response = client.get("/api/v1/health")
+def test_success_response_also_contains_request_id_header(api_client: TestClient):
+    response = api_client.get("/api/v1/health")
 
     assert response.status_code == 200
     assert response.headers["X-Request-ID"]

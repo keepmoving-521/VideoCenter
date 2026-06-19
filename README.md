@@ -177,6 +177,9 @@ python -m pytest
 pytest 使用独立数据库的创建、迁移、隔离和清理机制请参阅
 [测试专用数据库文档](docs/testing-database.md)。
 
+API 客户端、数据工厂、响应断言和集成测试标记请参阅
+[API 集成测试框架](docs/api-integration-testing.md)。
+
 ## 项目结构
 
 ```text

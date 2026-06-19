@@ -12,5 +12,6 @@
 - [B06：统一 API 错误响应格式](api-error-response.md)
 - [B07：请求参数校验](request-validation.md)
 - [B08：测试专用数据库](testing-database.md)
+- [B09：API 集成测试框架](api-integration-testing.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

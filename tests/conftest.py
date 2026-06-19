@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
@@ -20,7 +21,10 @@ os.environ["VIDEOCENTER_DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["VIDEOCENTER_LOG_FILE_ENABLED"] = "false"
 os.environ["VIDEOCENTER_DOCS_ENABLED"] = "true"
 
+from tests.support.api import ApiAssertions  # noqa: E402
+from tests.support.factories import ModelFactory  # noqa: E402
 from videocenter.core.database import Base, SessionLocal, engine  # noqa: E402
+from videocenter.main import app  # noqa: E402
 from videocenter.models import DownloadTask, LocalResource, Media, WatchHistory  # noqa: E402, F401
 
 
@@ -53,6 +57,23 @@ def db_session(test_database: Path) -> Generator[Session, None, None]:
             yield session
         finally:
             session.rollback()
+
+
+@pytest.fixture
+def api_client(test_database: Path) -> Generator[TestClient, None, None]:
+    del test_database
+    with TestClient(app) as client:
+        yield client
+
+
+@pytest.fixture
+def api_assertions() -> ApiAssertions:
+    return ApiAssertions()
+
+
+@pytest.fixture
+def model_factory(db_session: Session) -> ModelFactory:
+    return ModelFactory(db_session)
 
 
 @pytest.fixture(autouse=True)

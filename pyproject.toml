@@ -31,6 +31,10 @@ packages = ["src/videocenter"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = ["--strict-markers"]
+markers = [
+    "integration: exercises the real FastAPI app with the migrated test database",
+]
 
 [tool.ruff]
 line-length = 100
