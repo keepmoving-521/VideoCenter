@@ -30,6 +30,7 @@ python -m pip install uv
 ```powershell
 uv sync --extra dev --frozen
 Copy-Item .env.example .env
+uv run alembic upgrade head
 uv run uvicorn videocenter.main:app --reload
 ```
 
@@ -48,6 +49,7 @@ python -m pip install --upgrade pip
 ```powershell
 python -m pip install -r requirements-dev.txt
 Copy-Item .env.example .env
+python -m alembic upgrade head
 python -m uvicorn videocenter.main:app --reload
 ```
 
@@ -56,6 +58,7 @@ python -m uvicorn videocenter.main:app --reload
 ```powershell
 python -m pip install -r requirements.txt
 Copy-Item .env.example .env
+python -m alembic upgrade head
 python -m uvicorn videocenter.main:app --host 0.0.0.0 --port 8000
 ```
 

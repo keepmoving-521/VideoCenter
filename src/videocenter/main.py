@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from videocenter.api.router import api_router
 from videocenter.core.config import get_settings
-from videocenter.core.database import create_database
 
 settings = get_settings()
 
@@ -13,7 +12,6 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings.media_root.mkdir(parents=True, exist_ok=True)
-    create_database()
     yield
 
 

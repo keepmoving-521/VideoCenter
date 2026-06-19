@@ -5,5 +5,6 @@
 ## 专题文档
 
 - [B01：引入 Alembic 数据库迁移](database-migrations.md)
+- [B02：创建当前数据库初始迁移](initial-database-migration.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

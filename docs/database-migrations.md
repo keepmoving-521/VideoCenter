@@ -25,7 +25,8 @@
 - 开启字段类型差异检测；
 - 为 SQLite 开启批量迁移模式。
 
-当前仅完成 Alembic 基础设施接入。初始数据库版本将在 `B02` 迭代中创建。
+初始数据库版本已在 `B02` 迭代中创建，详见
+[初始数据库迁移](initial-database-migration.md)。
 
 ## 目录说明
 
@@ -202,18 +203,9 @@ Copy-Item .\data\videocenter.db .\data\videocenter.backup.db
 - 临时数据库备份；
 - 迁移执行产生的本地缓存。
 
-## 当前阶段限制
+## 当前状态
 
-- `migrations/versions/` 中尚无初始迁移；
-- 应用启动时仍会调用 `create_all()`；
-- 在 `B02` 完成初始迁移并验证升级流程后，再考虑完全改为由 Alembic 管理建表。
-
-## 下一步
-
-下一项迭代为 `B02：创建当前数据库初始迁移`，主要包括：
-
-1. 根据现有四张业务表生成初始迁移；
-2. 检查主键、索引、外键和唯一约束；
-3. 在空数据库执行 `upgrade head`；
-4. 验证降级和重新升级；
-5. 处理已有数据库接入 Alembic 版本管理的问题。
+- 已创建初始迁移版本 `81fd73d3a90a`；
+- 应用启动时不再调用 `create_all()`；
+- 新环境必须先执行 `alembic upgrade head`；
+- 已有数据库可在结构核验后使用 `alembic stamp head` 接入版本管理。

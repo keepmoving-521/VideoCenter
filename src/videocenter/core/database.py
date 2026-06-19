@@ -25,12 +25,6 @@ class Base(DeclarativeBase):
     pass
 
 
-def create_database() -> None:
-    from videocenter.models import download, history, media  # noqa: F401
-
-    Base.metadata.create_all(bind=engine)
-
-
 def get_db() -> Generator[Session, None, None]:
     with SessionLocal() as session:
         yield session
