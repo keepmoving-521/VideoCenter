@@ -26,7 +26,7 @@ def test_ci_workflow_uses_locked_python_environment():
 
     assert job["runs-on"] == "ubuntu-latest"
     assert any(step.get("uses") == "actions/setup-python@v6" for step in steps)
-    assert any(step.get("uses") == "astral-sh/setup-uv@v8" for step in steps)
+    assert any(step.get("uses") == "astral-sh/setup-uv@v8.2.0" for step in steps)
     assert any(step.get("run") == "uv sync --frozen --extra dev" for step in steps)
 
 

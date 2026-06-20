@@ -1,0 +1,1 @@
+"""VideoCenter test suite."""

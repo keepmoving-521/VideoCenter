@@ -51,10 +51,11 @@ uv sync --frozen --extra dev
 ```text
 actions/checkout@v7
 actions/setup-python@v6
-astral-sh/setup-uv@v8
+astral-sh/setup-uv@v8.2.0
 ```
 
-这些是 B12 实施时官方仓库提供的稳定主版本。uv 本身额外固定为 `0.11.22`。
+`checkout` 和 `setup-python` 使用官方维护的稳定主版本别名；`setup-uv`
+使用实际发布标签 `v8.2.0`。uv 程序本身另外固定为 `0.11.22`。
 
 ## CI 环境配置
 
@@ -90,10 +91,11 @@ Python 版本固定为 3.12。
 ### 3. 安装 uv
 
 ```yaml
-uses: astral-sh/setup-uv@v8
+uses: astral-sh/setup-uv@v8.2.0
 ```
 
-开启 uv 依赖缓存，并使用 `uv.lock` 作为缓存依赖依据。
+开启 uv 依赖缓存，并使用 `uv.lock` 作为缓存依赖依据。这里使用实际存在的
+完整发布标签 `v8.2.0`，不能写成不存在的 `v8` 主版本别名。
 
 ### 4. 安装依赖
 
@@ -188,6 +190,26 @@ Pull Request 页面也会显示 CI 检查状态。
 建议在 GitHub 分支保护规则中将 `Quality and tests` 设为合并前必需检查。
 
 ## 常见失败
+
+### Unable to resolve action
+
+如果 Job 在 `Set up job` 阶段立即失败，并出现类似提示：
+
+```text
+Unable to resolve action `astral-sh/setup-uv@v8`
+```
+
+说明工作流引用了不存在的 Action 标签。`setup-uv` 的 v8 系列应使用实际发布
+标签，例如：
+
+```yaml
+uses: astral-sh/setup-uv@v8.2.0
+```
+
+Action 标签与安装的 uv 程序版本是两个独立配置：
+
+- `uses: astral-sh/setup-uv@v8.2.0` 是 GitHub Action 自身版本；
+- `version: "0.11.22"` 是该 Action 安装的 uv 程序版本。
 
 ### Locked dependencies 不一致
 
