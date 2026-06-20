@@ -248,6 +248,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 影视信息编辑、关联清理和批量删除规则请参阅
 [影视编辑删除文档](docs/media-edit-delete.md)。
 
+收藏切换和标签增删改查、影视标签关联请参阅
+[收藏与标签管理文档](docs/favorites-and-tags.md)。
+
 ## 项目结构
 
 ```text

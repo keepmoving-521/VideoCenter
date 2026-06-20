@@ -343,6 +343,11 @@ class MediaBatchDeleteResponse(BaseModel):
     missing_ids: list[int]
 
 
+class MediaFavoriteRead(BaseModel):
+    media_id: int
+    is_favorite: bool
+
+
 class LocalScanRequest(ApiRequestModel):
     path: str | None = Field(default=None, min_length=1, max_length=2048)
     media_id: PositiveId | None = None

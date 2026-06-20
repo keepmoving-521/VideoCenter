@@ -9,12 +9,20 @@ class TagCreate(ApiRequestModel):
     name: ShortText = Field(max_length=100)
 
 
+class TagUpdate(ApiRequestModel):
+    name: ShortText = Field(max_length=100)
+
+
 class TagRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
     created_at: datetime
+
+
+class TagDetailRead(TagRead):
+    media_count: int
 
 
 class MediaTagsUpdate(ApiRequestModel):

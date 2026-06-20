@@ -1,13 +1,20 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import BadRequestError, ConflictError, NotFoundError
-from videocenter.models.media import Episode, Media, MediaType, Season, Tag
+from videocenter.models.media import (
+    Episode,
+    Media,
+    MediaType,
+    Season,
+    Tag,
+    media_tags,
+)
 from videocenter.schemas.catalog import (
     EpisodeCreate,
     EpisodeDetailRead,
@@ -20,7 +27,9 @@ from videocenter.schemas.catalog import (
     SeasonUpdate,
     SeasonWithEpisodesRead,
     TagCreate,
+    TagDetailRead,
     TagRead,
+    TagUpdate,
 )
 
 router = APIRouter()
@@ -87,6 +96,53 @@ def create_tag(payload: TagCreate, db: Session = Depends(get_db)):
     return tag
 
 
+@router.get(
+    "/tags/{tag_id}",
+    response_model=TagDetailRead,
+    tags=["影视标签"],
+)
+def get_tag(
+    tag_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    tag = db.get(Tag, tag_id)
+    if tag is None:
+        raise NotFoundError("影视标签不存在", code="TAG_NOT_FOUND")
+    media_count = db.scalar(
+        select(func.count()).select_from(media_tags).where(media_tags.c.tag_id == tag_id)
+    )
+    return TagDetailRead(
+        id=tag.id,
+        name=tag.name,
+        created_at=tag.created_at,
+        media_count=media_count or 0,
+    )
+
+
+@router.patch(
+    "/tags/{tag_id}",
+    response_model=TagRead,
+    tags=["影视标签"],
+)
+def update_tag(
+    tag_id: Annotated[int, Path(gt=0)],
+    payload: TagUpdate,
+    db: Session = Depends(get_db),
+):
+    tag = db.get(Tag, tag_id)
+    if tag is None:
+        raise NotFoundError("影视标签不存在", code="TAG_NOT_FOUND")
+    tag.name = payload.name
+    tag.normalized_name = payload.name.casefold()
+    commit_or_conflict(
+        db,
+        code="TAG_ALREADY_EXISTS",
+        message="同名标签已存在",
+    )
+    db.refresh(tag)
+    return tag
+
+
 @router.delete(
     "/tags/{tag_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -123,6 +179,46 @@ def replace_media_tags(
     media.tags = [tags_by_id[tag_id] for tag_id in payload.tag_ids]
     db.commit()
     return media.tags
+
+
+@router.post(
+    "/media/{media_id}/tags/{tag_id}",
+    response_model=list[TagRead],
+    tags=["影视标签"],
+)
+def add_media_tag(
+    media_id: Annotated[int, Path(gt=0)],
+    tag_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    media = get_media_or_404(db, media_id)
+    tag = db.get(Tag, tag_id)
+    if tag is None:
+        raise NotFoundError("影视标签不存在", code="TAG_NOT_FOUND")
+    if tag not in media.tags:
+        media.tags.append(tag)
+        db.commit()
+    return sorted(media.tags, key=lambda item: item.name)
+
+
+@router.delete(
+    "/media/{media_id}/tags/{tag_id}",
+    response_model=list[TagRead],
+    tags=["影视标签"],
+)
+def remove_media_tag(
+    media_id: Annotated[int, Path(gt=0)],
+    tag_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    media = get_media_or_404(db, media_id)
+    tag = db.get(Tag, tag_id)
+    if tag is None:
+        raise NotFoundError("影视标签不存在", code="TAG_NOT_FOUND")
+    if tag in media.tags:
+        media.tags.remove(tag)
+        db.commit()
+    return sorted(media.tags, key=lambda item: item.name)
 
 
 @router.get(

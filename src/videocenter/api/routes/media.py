@@ -12,6 +12,7 @@ from videocenter.schemas.media import (
     MediaBatchDeleteResponse,
     MediaCreate,
     MediaDetailRead,
+    MediaFavoriteRead,
     MediaPage,
     MediaRead,
     MediaSortField,
@@ -115,6 +116,42 @@ def create_media(payload: MediaCreate, db: Session = Depends(get_db)):
     db.add(media)
     db.commit()
     return get_media(media.id, db)
+
+
+@router.put(
+    "/{media_id}/favorite",
+    response_model=MediaFavoriteRead,
+    tags=["影视收藏"],
+)
+def favorite_media(
+    media_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    media = db.get(Media, media_id)
+    if media is None:
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
+    if not media.is_favorite:
+        media.is_favorite = True
+        db.commit()
+    return MediaFavoriteRead(media_id=media.id, is_favorite=True)
+
+
+@router.delete(
+    "/{media_id}/favorite",
+    response_model=MediaFavoriteRead,
+    tags=["影视收藏"],
+)
+def unfavorite_media(
+    media_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    media = db.get(Media, media_id)
+    if media is None:
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
+    if media.is_favorite:
+        media.is_favorite = False
+        db.commit()
+    return MediaFavoriteRead(media_id=media.id, is_favorite=False)
 
 
 @router.get("/{media_id}", response_model=MediaDetailRead)
