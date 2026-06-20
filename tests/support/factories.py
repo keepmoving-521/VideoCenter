@@ -99,7 +99,7 @@ class ModelFactory:
             "media_id": media.id if media else None,
             "source_url": "https://example.com/test-video.mp4",
             "target_name": f"test-video-{uuid4().hex}.mp4",
-            "status": DownloadStatus.PENDING,
+            "status": DownloadStatus.WAITING,
             "progress": 0,
         }
         values.update(overrides)

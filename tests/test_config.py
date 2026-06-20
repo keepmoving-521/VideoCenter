@@ -84,6 +84,18 @@ def test_parser_retry_settings_are_configurable():
     assert settings.parser_cache_max_entries == 25
 
 
+def test_download_worker_count_is_configurable():
+    settings = Settings(download_worker_count=3, _env_file=None)
+
+    assert settings.download_worker_count == 3
+
+
+@pytest.mark.parametrize("worker_count", [0, 17])
+def test_invalid_download_worker_count_is_rejected(worker_count):
+    with pytest.raises(ValidationError):
+        Settings(download_worker_count=worker_count, _env_file=None)
+
+
 @pytest.mark.parametrize(
     "values",
     [

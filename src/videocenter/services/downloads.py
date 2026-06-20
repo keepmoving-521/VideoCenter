@@ -2,12 +2,14 @@ import re
 import threading
 from pathlib import Path
 
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from videocenter.core.config import get_settings
 from videocenter.core.database import SessionLocal
 from videocenter.models.download import DownloadStatus, DownloadTask
 from videocenter.models.media import LocalResource
+from videocenter.services.download_queue import DownloadTaskQueue
 from videocenter.services.downloaders import (
     DownloadCancellationToken,
     DownloadCancelledError,
@@ -17,9 +19,9 @@ from videocenter.services.downloaders import (
     HttpDirectDownloader,
 )
 
-_cancel_tokens: dict[int, DownloadCancellationToken] = {}
-_events_lock = threading.Lock()
 _default_downloader = HttpDirectDownloader()
+_queue_lock = threading.Lock()
+_download_queue: DownloadTaskQueue | None = None
 
 
 def safe_target_name(name: str) -> str:
@@ -30,18 +32,40 @@ def safe_target_name(name: str) -> str:
 
 
 def start_download(task_id: int) -> None:
-    token = DownloadCancellationToken()
-    with _events_lock:
-        _cancel_tokens[task_id] = token
-    threading.Thread(target=_run_download, args=(task_id, token), daemon=True).start()
+    get_download_queue().enqueue(task_id)
+
+
+def get_download_queue() -> DownloadTaskQueue:
+    global _download_queue
+    with _queue_lock:
+        if _download_queue is None:
+            _download_queue = DownloadTaskQueue(
+                _run_download,
+                worker_count=get_settings().download_worker_count,
+            )
+        return _download_queue
+
+
+def restore_download_queue() -> int:
+    with SessionLocal() as db:
+        db.execute(
+            update(DownloadTask)
+            .where(DownloadTask.status == DownloadStatus.DOWNLOADING)
+            .values(status=DownloadStatus.WAITING, progress=0)
+        )
+        waiting_ids = db.scalars(
+            select(DownloadTask.id)
+            .where(DownloadTask.status == DownloadStatus.WAITING)
+            .order_by(DownloadTask.id)
+        ).all()
+        db.commit()
+    queue_instance = get_download_queue()
+    return sum(queue_instance.enqueue(task_id) for task_id in waiting_ids)
 
 
 def cancel_download(db: Session, task: DownloadTask) -> DownloadTask:
-    with _events_lock:
-        token = _cancel_tokens.get(task.id)
-    if token:
-        token.cancel()
-    if task.status in {DownloadStatus.PENDING, DownloadStatus.RUNNING}:
+    get_download_queue().cancel(task.id)
+    if task.status in {DownloadStatus.WAITING, DownloadStatus.DOWNLOADING}:
         task.status = DownloadStatus.CANCELLED
         db.commit()
         db.refresh(task)
@@ -60,7 +84,7 @@ def _run_download(
                 return
             if task.status == DownloadStatus.CANCELLED or cancellation_token.is_cancelled:
                 return
-            task.status = DownloadStatus.RUNNING
+            task.status = DownloadStatus.DOWNLOADING
             task.error_message = None
             db.commit()
 
@@ -109,6 +133,3 @@ def _run_download(
                 task.status = DownloadStatus.FAILED
                 task.error_message = str(exc)
                 db.commit()
-    finally:
-        with _events_lock:
-            _cancel_tokens.pop(task_id, None)

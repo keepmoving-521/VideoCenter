@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     database_echo: bool = False
     database_url: str = "sqlite:///./data/videocenter.db"
     media_root: Path = Path("./data/media")
+    download_worker_count: int = 1
     parser_timeout_seconds: float = 30
     parser_max_attempts: int = 3
     parser_retry_delay_seconds: float = 0.5
@@ -106,6 +107,13 @@ class Settings(BaseSettings):
     def validate_parser_cache_max_entries(cls, value: int) -> int:
         if value < 1:
             raise ValueError("Parser cache max entries must be greater than zero")
+        return value
+
+    @field_validator("download_worker_count")
+    @classmethod
+    def validate_download_worker_count(cls, value: int) -> int:
+        if value < 1 or value > 16:
+            raise ValueError("Download worker count must be between 1 and 16")
         return value
 
     @model_validator(mode="after")

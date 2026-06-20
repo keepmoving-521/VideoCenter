@@ -8,8 +8,8 @@ from videocenter.core.database import Base
 
 
 class DownloadStatus(StrEnum):
-    PENDING = "pending"
-    RUNNING = "running"
+    WAITING = "waiting"
+    DOWNLOADING = "downloading"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -24,7 +24,7 @@ class DownloadTask(Base):
     target_name: Mapped[str] = mapped_column(String(512))
     target_path: Mapped[str | None] = mapped_column(String(2048))
     status: Mapped[DownloadStatus] = mapped_column(
-        Enum(DownloadStatus), default=DownloadStatus.PENDING, index=True
+        Enum(DownloadStatus), default=DownloadStatus.WAITING, index=True
     )
     progress: Mapped[float] = mapped_column(Float, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)

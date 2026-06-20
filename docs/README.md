@@ -40,5 +40,6 @@
 - [L17～L18：最近添加与收藏影视列表](media-recent-favorites.md)
 - [D01：下载器统一接口](downloader-interface.md)
 - [D02：HTTP 直链下载器重构](http-direct-downloader.md)
+- [D03～D04：下载任务队列与状态](download-queue-statuses.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

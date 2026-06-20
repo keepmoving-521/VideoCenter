@@ -165,6 +165,9 @@ python -m pytest
 现有 HTTP 下载实现的职责划分请参阅
 [HTTP 直链下载器文档](docs/http-direct-downloader.md)。
 
+下载任务排队、并发工作线程和状态流转请参阅
+[下载任务队列与状态文档](docs/download-queue-statuses.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

@@ -1,4 +1,5 @@
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -57,6 +58,7 @@ def test_download_task_execution_uses_downloader_result(
         media=media,
         target_name="contract-video.mp4",
     )
+    assert task.status == DownloadStatus.WAITING
 
     _run_download(
         task.id,
@@ -73,3 +75,26 @@ def test_download_task_execution_uses_downloader_result(
     assert resource is not None
     assert resource.file_size == 10
     assert resource.mime_type == "video/mp4"
+
+
+def test_created_download_task_starts_in_waiting_status(
+    api_client: TestClient,
+    monkeypatch,
+):
+    queued_ids: list[int] = []
+    monkeypatch.setattr(
+        "videocenter.api.routes.downloads.start_download",
+        queued_ids.append,
+    )
+
+    response = api_client.post(
+        "/api/v1/downloads",
+        json={
+            "source_url": "https://example.com/video.mp4",
+            "target_name": "video.mp4",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "waiting"
+    assert queued_ids == [response.json()["id"]]

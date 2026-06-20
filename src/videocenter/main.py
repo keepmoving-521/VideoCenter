@@ -10,6 +10,7 @@ from videocenter.api.router import api_router
 from videocenter.core.config import get_settings
 from videocenter.core.logging import configure_logging
 from videocenter.schemas.error import STANDARD_ERROR_RESPONSES
+from videocenter.services.downloads import restore_download_queue
 
 settings = get_settings()
 configure_logging(settings)
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings.media_root.mkdir(parents=True, exist_ok=True)
+    restored_downloads = restore_download_queue()
+    if restored_downloads:
+        logger.info("Restored %s waiting download tasks", restored_downloads)
     logger.info("Application started")
     yield
     logger.info("Application stopped")
