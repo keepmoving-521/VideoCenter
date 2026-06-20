@@ -1,6 +1,8 @@
+import hashlib
 import re
 import threading
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -19,21 +21,33 @@ from videocenter.services.downloaders import (
     DownloadRequest,
     HttpDirectDownloader,
 )
+from videocenter.services.downloaders.base import normalize_download_url
 
 _default_downloader = HttpDirectDownloader()
 _queue_lock = threading.Lock()
 _download_queue: DownloadTaskQueue | None = None
+WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
 
 
 def safe_target_name(name: str) -> str:
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", Path(name).name).strip(" .")
     if not cleaned:
         raise ValueError("无效的目标文件名")
+    path = Path(cleaned)
+    if path.stem.upper() in WINDOWS_RESERVED_NAMES:
+        cleaned = f"{path.stem}_{path.suffix}"
     return cleaned
 
 
-def start_download(task_id: int) -> None:
-    get_download_queue().enqueue(task_id)
+def start_download(task_id: int, *, priority: int = 0) -> None:
+    get_download_queue().enqueue(task_id, priority=priority)
 
 
 def get_download_queue() -> DownloadTaskQueue:
@@ -62,13 +76,13 @@ def restore_download_queue() -> int:
             )
         )
         waiting_ids = db.scalars(
-            select(DownloadTask.id)
+            select(DownloadTask)
             .where(DownloadTask.status == DownloadStatus.WAITING)
-            .order_by(DownloadTask.id)
+            .order_by(DownloadTask.priority.desc(), DownloadTask.id)
         ).all()
         db.commit()
     queue_instance = get_download_queue()
-    return sum(queue_instance.enqueue(task_id) for task_id in waiting_ids)
+    return sum(queue_instance.enqueue(task.id, priority=task.priority) for task in waiting_ids)
 
 
 def cancel_download(db: Session, task: DownloadTask) -> DownloadTask:
@@ -125,7 +139,7 @@ def resume_download(db: Session, task: DownloadTask) -> DownloadTask:
     else:
         reset_download_metrics(task)
         task.status = DownloadStatus.WAITING
-        queue_instance.enqueue(task.id)
+        queue_instance.enqueue(task.id, priority=task.priority)
     task.error_message = None
     db.commit()
     db.refresh(task)
@@ -143,7 +157,7 @@ def retry_download(db: Session, task: DownloadTask) -> DownloadTask:
     task.status = DownloadStatus.WAITING
     task.error_message = None
     db.commit()
-    get_download_queue().enqueue(task.id)
+    get_download_queue().enqueue(task.id, priority=task.priority)
     db.refresh(task)
     return task
 
@@ -155,6 +169,27 @@ def reset_download_metrics(task: DownloadTask) -> None:
     task.speed_bytes_per_second = None
     task.remaining_seconds = None
     task.target_path = None
+
+
+def normalized_download_source(source_url: str) -> str:
+    return normalize_download_url(source_url)
+
+
+def generate_target_name(
+    source_url: str,
+    *,
+    media_title: str | None = None,
+) -> str:
+    parsed = urlsplit(source_url)
+    url_name = unquote(Path(parsed.path).name)
+    suffix = Path(url_name).suffix
+    base_name = media_title or Path(url_name).stem or "download"
+    safe_base = safe_target_name(base_name)
+    safe_suffix = re.sub(r"[^A-Za-z0-9.]", "", suffix)[:16]
+    digest = hashlib.sha256(source_url.encode()).hexdigest()[:10]
+    max_base_length = 512 - len(digest) - len(safe_suffix) - 1
+    trimmed_base = safe_base[:max_base_length].rstrip(" .-_") or "download"
+    return f"{trimmed_base}-{digest}{safe_suffix}"
 
 
 def _run_download(

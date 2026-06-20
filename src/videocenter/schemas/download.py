@@ -1,22 +1,26 @@
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 from videocenter.models.download import DownloadStatus
-from videocenter.schemas.common import ApiRequestModel, PositiveId, ShortText
+from videocenter.schemas.common import ApiRequestModel, PositiveId
 
 INVALID_FILE_NAME_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
 class DownloadCreate(ApiRequestModel):
     source_url: HttpUrl
-    target_name: ShortText
+    target_name: str | None = Field(default=None, min_length=1, max_length=512)
     media_id: PositiveId | None = None
+    priority: int = Field(default=0, ge=-100, le=100)
 
     @field_validator("target_name")
     @classmethod
-    def validate_target_name(cls, value: str) -> str:
+    def validate_target_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
         if INVALID_FILE_NAME_PATTERN.search(value):
             raise ValueError("目标文件名包含非法字符")
         if value.endswith((".", " ")):
@@ -32,6 +36,7 @@ class DownloadRead(BaseModel):
     source_url: str
     target_name: str
     status: DownloadStatus
+    priority: int
     progress: float
     downloaded_bytes: int
     total_bytes: int | None

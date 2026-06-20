@@ -12,7 +12,7 @@ from videocenter.services.downloaders import (
     DownloadProgressState,
     DownloadResult,
 )
-from videocenter.services.downloads import _run_download, safe_target_name
+from videocenter.services.downloads import _run_download, generate_target_name, safe_target_name
 
 
 class FakeDownloader(Downloader):
@@ -47,7 +47,7 @@ class StubDownloadQueue:
         self.paused: set[int] = set()
         self.running: set[int] = set()
 
-    def enqueue(self, task_id: int) -> bool:
+    def enqueue(self, task_id: int, *, priority: int = 0) -> bool:
         self.queued.append(task_id)
         return True
 
@@ -75,6 +75,10 @@ def test_safe_target_name_removes_unsafe_characters():
 def test_safe_target_name_rejects_empty_name():
     with pytest.raises(ValueError):
         safe_target_name("...")
+
+
+def test_safe_target_name_avoids_windows_reserved_names():
+    assert safe_target_name("CON.mp4") == "CON_.mp4"
 
 
 def test_download_task_execution_uses_downloader_result(
@@ -114,9 +118,15 @@ def test_created_download_task_starts_in_waiting_status(
     monkeypatch,
 ):
     queued_ids: list[int] = []
+    queued_priorities: list[int] = []
+
+    def record_start(task_id: int, *, priority: int = 0) -> None:
+        queued_ids.append(task_id)
+        queued_priorities.append(priority)
+
     monkeypatch.setattr(
         "videocenter.api.routes.downloads.start_download",
-        queued_ids.append,
+        record_start,
     )
 
     response = api_client.post(
@@ -135,6 +145,87 @@ def test_created_download_task_starts_in_waiting_status(
     assert response.json()["speed_bytes_per_second"] is None
     assert response.json()["remaining_seconds"] is None
     assert queued_ids == [response.json()["id"]]
+    assert queued_priorities == [0]
+
+
+def test_download_priority_and_generated_target_name(
+    api_client: TestClient,
+    model_factory,
+    monkeypatch,
+):
+    queued: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        "videocenter.api.routes.downloads.start_download",
+        lambda task_id, *, priority=0: queued.append((task_id, priority)),
+    )
+    media = model_factory.media(title="My: Great Movie")
+
+    response = api_client.post(
+        "/api/v1/downloads",
+        json={
+            "source_url": "https://cdn.example.com/files/master-video.mp4?token=abc",
+            "media_id": media.id,
+            "priority": 80,
+        },
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["priority"] == 80
+    assert payload["target_name"].startswith("My_ Great Movie-")
+    assert payload["target_name"].endswith(".mp4")
+    assert queued == [(payload["id"], 80)]
+
+
+def test_generated_target_name_uses_url_and_stable_hash():
+    first = generate_target_name("https://example.com/videos/movie.mkv?token=one")
+    second = generate_target_name("https://example.com/videos/movie.mkv?token=two")
+
+    assert first.startswith("movie-")
+    assert first.endswith(".mkv")
+    assert first != second
+    assert generate_target_name(
+        "https://example.com/video.mp4",
+        media_title="Mr. Robot",
+    ).startswith("Mr. Robot-")
+
+
+def test_duplicate_download_is_rejected_but_cancelled_task_can_be_recreated(
+    api_client: TestClient,
+    api_assertions,
+    model_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "videocenter.api.routes.downloads.start_download",
+        lambda task_id, *, priority=0: None,
+    )
+    source_url = "https://example.com/video.mp4"
+    existing = model_factory.download_task(
+        source_url=source_url,
+        status=DownloadStatus.COMPLETED,
+    )
+
+    error = api_assertions.assert_error(
+        api_client.post(
+            "/api/v1/downloads",
+            json={"source_url": source_url},
+        ),
+        status_code=409,
+        code="DOWNLOAD_ALREADY_EXISTS",
+    )
+    assert error["error"]["details"] == {
+        "task_id": existing.id,
+        "status": "completed",
+    }
+
+    existing.status = DownloadStatus.CANCELLED
+    model_factory.session.commit()
+    response = api_client.post(
+        "/api/v1/downloads",
+        json={"source_url": source_url},
+    )
+    assert response.status_code == 202
 
 
 def test_download_pause_resume_cancel_and_retry_api(

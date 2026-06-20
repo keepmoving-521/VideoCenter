@@ -201,6 +201,18 @@ def test_download_target_name_rejects_unsafe_values(target_name):
         )
 
 
+def test_download_target_name_is_optional_and_priority_is_bounded():
+    payload = DownloadCreate(source_url="https://example.com/movie.mp4")
+    assert payload.target_name is None
+    assert payload.priority == 0
+
+    with pytest.raises(ValidationError):
+        DownloadCreate(
+            source_url="https://example.com/movie.mp4",
+            priority=101,
+        )
+
+
 def test_history_position_cannot_exceed_duration():
     with pytest.raises(ValidationError, match="播放位置不能超过视频总时长"):
         HistoryUpsert(

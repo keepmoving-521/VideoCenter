@@ -1,6 +1,7 @@
 import queue
 import threading
 from collections.abc import Callable
+from itertools import count
 
 from videocenter.services.downloaders import DownloadCancellationToken
 
@@ -14,7 +15,8 @@ class DownloadTaskQueue:
         if worker_count < 1:
             raise ValueError("worker_count must be greater than zero")
         self._runner = runner
-        self._queue: queue.Queue[int | None] = queue.Queue()
+        self._queue: queue.PriorityQueue[tuple[int, int, int | None]] = queue.PriorityQueue()
+        self._sequence = count()
         self._tokens: dict[int, DownloadCancellationToken] = {}
         self._running_ids: set[int] = set()
         self._lock = threading.Lock()
@@ -29,12 +31,12 @@ class DownloadTaskQueue:
         for worker in self._workers:
             worker.start()
 
-    def enqueue(self, task_id: int) -> bool:
+    def enqueue(self, task_id: int, *, priority: int = 0) -> bool:
         with self._lock:
             if task_id in self._tokens:
                 return False
             self._tokens[task_id] = DownloadCancellationToken()
-        self._queue.put(task_id)
+        self._queue.put((-priority, next(self._sequence), task_id))
         return True
 
     def cancel(self, task_id: int) -> bool:
@@ -83,13 +85,13 @@ class DownloadTaskQueue:
 
     def shutdown(self) -> None:
         for _ in self._workers:
-            self._queue.put(None)
+            self._queue.put((101, next(self._sequence), None))
         for worker in self._workers:
             worker.join(timeout=5)
 
     def _worker(self) -> None:
         while True:
-            task_id = self._queue.get()
+            _, _, task_id = self._queue.get()
             try:
                 if task_id is None:
                     return

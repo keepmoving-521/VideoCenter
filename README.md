@@ -174,6 +174,9 @@ python -m pytest
 下载任务暂停、恢复、取消和失败重试规则请参阅
 [下载任务控制文档](docs/download-task-controls.md)。
 
+下载并发数、优先级、重复检测和自动文件名规则请参阅
+[下载队列增强文档](docs/download-concurrency-priority-dedup-naming.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

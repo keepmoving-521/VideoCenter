@@ -46,6 +46,10 @@ class DownloadTask(Base):
             "remaining_seconds IS NULL OR remaining_seconds >= 0",
             name="ck_download_remaining_seconds_non_negative",
         ),
+        CheckConstraint(
+            "priority >= -100 AND priority <= 100",
+            name="ck_download_priority_range",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -56,6 +60,7 @@ class DownloadTask(Base):
     status: Mapped[DownloadStatus] = mapped_column(
         Enum(DownloadStatus), default=DownloadStatus.WAITING, index=True
     )
+    priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0", index=True)
     progress: Mapped[float] = mapped_column(Float, default=0)
     downloaded_bytes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     total_bytes: Mapped[int | None] = mapped_column(Integer)
