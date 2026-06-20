@@ -21,5 +21,6 @@
 - [M09～M12：海报、标签、电视剧季与分集](media-artwork-tags-seasons-episodes.md)
 - [M13：影片、季、分集关联](media-season-episode-association.md)
 - [M14～M15：收藏状态、个人评分和备注](media-personal-preferences.md)
+- [R01：资源解析器统一接口](resource-parser-interface.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

@@ -206,6 +206,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 收藏、个人评分和私人备注请参阅
 [影视个人偏好文档](docs/media-personal-preferences.md)。
 
+影视资源页面解析器的扩展契约请参阅
+[资源解析器统一接口文档](docs/resource-parser-interface.md)。
+
 ## 项目结构
 
 ```text
