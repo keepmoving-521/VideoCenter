@@ -1,6 +1,8 @@
 from videocenter.services.parsers.base import (
     ParsedDownload,
     ParsedEpisode,
+    ParsedMediaType,
+    ParsedResourceType,
     ParsedSeason,
     ParseRequest,
     ParseResult,
@@ -11,6 +13,8 @@ from videocenter.services.parsers.registry import ParserNotFoundError, ParserReg
 __all__ = [
     "ParsedDownload",
     "ParsedEpisode",
+    "ParsedMediaType",
+    "ParsedResourceType",
     "ParsedSeason",
     "ParseRequest",
     "ParseResult",
