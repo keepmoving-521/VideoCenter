@@ -162,6 +162,9 @@ python -m pytest
 下载器扩展契约、进度回调和取消机制请参阅
 [下载器统一接口文档](docs/downloader-interface.md)。
 
+现有 HTTP 下载实现的职责划分请参阅
+[HTTP 直链下载器文档](docs/http-direct-downloader.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

@@ -1,7 +1,5 @@
-import mimetypes
 import re
 import threading
-import urllib.request
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -10,9 +8,18 @@ from videocenter.core.config import get_settings
 from videocenter.core.database import SessionLocal
 from videocenter.models.download import DownloadStatus, DownloadTask
 from videocenter.models.media import LocalResource
+from videocenter.services.downloaders import (
+    DownloadCancellationToken,
+    DownloadCancelledError,
+    Downloader,
+    DownloadProgress,
+    DownloadRequest,
+    HttpDirectDownloader,
+)
 
-_cancel_events: dict[int, threading.Event] = {}
+_cancel_tokens: dict[int, DownloadCancellationToken] = {}
 _events_lock = threading.Lock()
+_default_downloader = HttpDirectDownloader()
 
 
 def safe_target_name(name: str) -> str:
@@ -23,17 +30,17 @@ def safe_target_name(name: str) -> str:
 
 
 def start_download(task_id: int) -> None:
-    event = threading.Event()
+    token = DownloadCancellationToken()
     with _events_lock:
-        _cancel_events[task_id] = event
-    threading.Thread(target=_run_download, args=(task_id, event), daemon=True).start()
+        _cancel_tokens[task_id] = token
+    threading.Thread(target=_run_download, args=(task_id, token), daemon=True).start()
 
 
 def cancel_download(db: Session, task: DownloadTask) -> DownloadTask:
     with _events_lock:
-        event = _cancel_events.get(task.id)
-    if event:
-        event.set()
+        token = _cancel_tokens.get(task.id)
+    if token:
+        token.cancel()
     if task.status in {DownloadStatus.PENDING, DownloadStatus.RUNNING}:
         task.status = DownloadStatus.CANCELLED
         db.commit()
@@ -41,55 +48,60 @@ def cancel_download(db: Session, task: DownloadTask) -> DownloadTask:
     return task
 
 
-def _run_download(task_id: int, cancel_event: threading.Event) -> None:
-    temp_path: Path | None = None
+def _run_download(
+    task_id: int,
+    cancellation_token: DownloadCancellationToken,
+    downloader: Downloader = _default_downloader,
+) -> None:
     try:
         with SessionLocal() as db:
             task = db.get(DownloadTask, task_id)
             if not task:
                 return
-            if task.status == DownloadStatus.CANCELLED or cancel_event.is_set():
+            if task.status == DownloadStatus.CANCELLED or cancellation_token.is_cancelled:
                 return
             task.status = DownloadStatus.RUNNING
+            task.error_message = None
             db.commit()
 
             target = get_settings().media_root / safe_target_name(task.target_name)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            temp_path = target.with_suffix(target.suffix + ".part")
-            request = urllib.request.Request(
-                task.source_url, headers={"User-Agent": "VideoCenter/0.1"}
+            request = DownloadRequest(
+                source_url=task.source_url,
+                target_path=target,
+                headers={"User-Agent": "VideoCenter/0.1"},
+                timeout_seconds=30,
+                overwrite=True,
             )
-            with (
-                urllib.request.urlopen(request, timeout=30) as response,
-                temp_path.open("wb") as output,
-            ):
-                total = int(response.headers.get("Content-Length", 0))
-                downloaded = 0
-                while chunk := response.read(1024 * 1024):
-                    if cancel_event.is_set():
-                        task.status = DownloadStatus.CANCELLED
-                        db.commit()
-                        return
-                    output.write(chunk)
-                    downloaded += len(chunk)
-                    if total:
-                        task.progress = round(downloaded / total * 100, 2)
-                        db.commit()
 
-            temp_path.replace(target)
-            task.target_path = str(target.resolve())
+            def update_progress(progress: DownloadProgress) -> None:
+                if progress.percentage is not None:
+                    task.progress = progress.percentage
+                    db.commit()
+
+            result = downloader.download(
+                request,
+                progress_callback=update_progress,
+                cancellation_token=cancellation_token,
+            )
+            task.target_path = str(result.target_path)
             task.progress = 100
             task.status = DownloadStatus.COMPLETED
             db.add(
                 LocalResource(
                     media_id=task.media_id,
-                    file_path=str(target.resolve()),
-                    file_name=target.name,
-                    file_size=target.stat().st_size,
-                    mime_type=mimetypes.guess_type(target.name)[0] or "application/octet-stream",
+                    file_path=str(result.target_path),
+                    file_name=result.target_path.name,
+                    file_size=result.file_size,
+                    mime_type=result.mime_type or "application/octet-stream",
                 )
             )
             db.commit()
+    except DownloadCancelledError:
+        with SessionLocal() as db:
+            task = db.get(DownloadTask, task_id)
+            if task:
+                task.status = DownloadStatus.CANCELLED
+                db.commit()
     except Exception as exc:
         with SessionLocal() as db:
             task = db.get(DownloadTask, task_id)
@@ -98,7 +110,5 @@ def _run_download(task_id: int, cancel_event: threading.Event) -> None:
                 task.error_message = str(exc)
                 db.commit()
     finally:
-        if temp_path and temp_path.exists():
-            temp_path.unlink(missing_ok=True)
         with _events_lock:
-            _cancel_events.pop(task_id, None)
+            _cancel_tokens.pop(task_id, None)

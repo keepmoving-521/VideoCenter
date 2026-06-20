@@ -39,5 +39,6 @@
 - [L14～L16：重复影视检测、资源合并与影视库统计](media-duplicates-merge-stats.md)
 - [L17～L18：最近添加与收藏影视列表](media-recent-favorites.md)
 - [D01：下载器统一接口](downloader-interface.md)
+- [D02：HTTP 直链下载器重构](http-direct-downloader.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。
