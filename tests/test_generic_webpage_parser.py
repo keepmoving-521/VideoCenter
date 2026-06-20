@@ -61,6 +61,7 @@ def test_generic_webpage_parser_extracts_json_ld_and_open_graph_metadata():
     assert result.media_type == ParsedMediaType.MOVIE
     assert result.description == "JSON-LD description"
     assert result.release_date.isoformat() == "2025-05-20"
+    assert result.release_year == 2025
     assert result.duration_minutes == 95
     assert result.rating == 8.7
     assert result.directors == ("Director One",)
@@ -93,6 +94,78 @@ def test_generic_webpage_parser_falls_back_to_basic_html_metadata():
     assert result.description == "Basic description"
     assert result.poster_url == "https://cdn.test/poster.jpg"
     assert result.media_type == ParsedMediaType.OTHER
+
+
+def test_generic_webpage_parser_extracts_r06_to_r10_meta_fallbacks():
+    html = """
+    <html>
+      <head>
+        <meta name="movie:title" content="Meta Movie">
+        <meta name="movie:description" content="Meta movie description">
+        <meta name="thumbnailUrl" content="/assets/meta-poster.jpg">
+        <meta name="release_date" content="2023">
+        <meta name="director" content="Director One, Director Two">
+        <meta name="actor" content="Actor One">
+        <meta name="actor" content="Actor Two、Actor One">
+      </head>
+    </html>
+    """
+
+    async def fetcher(url: str) -> WebPageResponse:
+        return response(html, url=url)
+
+    result = asyncio.run(
+        GenericWebPageParser(fetcher).parse(ParseRequest("https://metadata.test/movie/1"))
+    )
+
+    assert result.title == "Meta Movie"
+    assert result.description == "Meta movie description"
+    assert result.poster_url == "https://metadata.test/assets/meta-poster.jpg"
+    assert result.release_year == 2023
+    assert result.release_date is None
+    assert result.directors == ("Director One", "Director Two")
+    assert result.actors == ("Actor One", "Actor Two")
+
+
+def test_json_ld_fields_take_priority_and_meta_people_are_merged():
+    html = """
+    <html>
+      <head>
+        <title>HTML title</title>
+        <meta property="og:title" content="Open Graph title">
+        <meta property="og:description" content="Open Graph description">
+        <meta property="og:image" content="/images/open-graph.jpg">
+        <meta name="actor" content="Actor Two, Actor Three">
+        <meta name="director" content="Director One">
+        <script type="application/ld+json">
+        {
+          "@type": "Movie",
+          "name": "Structured title",
+          "description": "Structured description",
+          "image": "/images/structured.jpg",
+          "releaseDate": "2024-08-09",
+          "director": {"name": "Director One"},
+          "actors": [{"name": "Actor One"}, {"name": "Actor Two"}]
+        }
+        </script>
+      </head>
+    </html>
+    """
+
+    async def fetcher(url: str) -> WebPageResponse:
+        return response(html, url=url)
+
+    result = asyncio.run(
+        GenericWebPageParser(fetcher).parse(ParseRequest("https://priority.test/movie/1"))
+    )
+
+    assert result.title == "Structured title"
+    assert result.description == "Structured description"
+    assert result.poster_url == "https://priority.test/images/structured.jpg"
+    assert result.release_year == 2024
+    assert result.release_date.isoformat() == "2024-08-09"
+    assert result.directors == ("Director One",)
+    assert result.actors == ("Actor One", "Actor Two", "Actor Three")
 
 
 def test_generic_webpage_parser_ignores_invalid_json_ld():

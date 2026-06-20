@@ -221,6 +221,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 普通网页的 JSON-LD、Open Graph 和 HTML 基础信息提取请参阅
 [通用网页解析器文档](docs/generic-webpage-parser.md)。
 
+网页标题、简介、海报、上映年份和演职员的详细解析规则请参阅
+[网页影片核心信息解析文档](docs/webpage-core-metadata-parsing.md)。
+
 ## 项目结构
 
 ```text

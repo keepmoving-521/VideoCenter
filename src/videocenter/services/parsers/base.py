@@ -170,6 +170,7 @@ class ParseResult(ParserDataModel):
     alternative_titles: tuple[str, ...] = ()
     media_type: ParsedMediaType = ParsedMediaType.MOVIE
     description: str | None = Field(default=None, max_length=10_000)
+    release_year: int | None = Field(default=None, ge=1888, le=2100)
     release_date: date | None = None
     content_rating: str | None = Field(default=None, min_length=1, max_length=32)
     directors: tuple[str, ...] = ()
@@ -218,6 +219,10 @@ class ParseResult(ParserDataModel):
 
     @model_validator(mode="after")
     def validate_hierarchy(self) -> "ParseResult":
+        if self.release_date is not None:
+            if self.release_year is not None and self.release_year != self.release_date.year:
+                raise ValueError("上映年份必须与上映日期的年份一致")
+            object.__setattr__(self, "release_year", self.release_date.year)
         season_numbers = [season.season_number for season in self.seasons]
         if len(season_numbers) != len(set(season_numbers)):
             raise ValueError("同一影片的季编号不能重复")

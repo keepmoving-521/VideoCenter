@@ -22,6 +22,8 @@ ISO_DURATION_PATTERN = re.compile(
     r"^PT(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?$",
     re.IGNORECASE,
 )
+NAME_SEPARATOR_PATTERN = re.compile(r"[,;|，；、]+")
+YEAR_PATTERN = re.compile(r"(?<!\d)(18(?:8[8-9]|9\d)|19\d{2}|20\d{2}|2100)(?!\d)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +71,7 @@ class WebPageMetadataParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.title_parts: list[str] = []
         self.meta: dict[str, str] = {}
+        self.meta_values: dict[str, list[str]] = {}
         self.canonical_url: str | None = None
         self.json_ld_blocks: list[str] = []
         self._in_title = False
@@ -92,7 +95,9 @@ class WebPageMetadataParser(HTMLParser):
             key = attributes.get("property") or attributes.get("name") or attributes.get("itemprop")
             content = attributes.get("content")
             if key and content:
-                self.meta.setdefault(key.casefold(), content)
+                normalized_key = key.casefold()
+                self.meta.setdefault(normalized_key, content)
+                self.meta_values.setdefault(normalized_key, []).append(content)
         elif tag == "link" and "canonical" in attributes.get("rel", "").casefold().split():
             self.canonical_url = attributes.get("href")
         elif tag == "script" and attributes.get("type", "").casefold() == "application/ld+json":
@@ -177,6 +182,23 @@ def names(value: Any) -> tuple[str, ...]:
     return tuple(name for item in values if (name := text_value(item)) is not None)
 
 
+def first_meta(meta: dict[str, str], *keys: str) -> str | None:
+    return next((meta[key] for key in keys if key in meta), None)
+
+
+def meta_names(
+    meta_values: dict[str, list[str]],
+    *keys: str,
+) -> tuple[str, ...]:
+    result: list[str] = []
+    for key in keys:
+        for value in meta_values.get(key, []):
+            result.extend(
+                item.strip() for item in NAME_SEPARATOR_PATTERN.split(value) if item.strip()
+            )
+    return tuple(result)
+
+
 def image_url(value: Any) -> str | None:
     if isinstance(value, list):
         return next((url for item in value if (url := image_url(item))), None)
@@ -193,6 +215,14 @@ def parse_date(value: Any) -> date | None:
         return date.fromisoformat(raw[:10])
     except ValueError:
         return None
+
+
+def parse_release_year(value: Any) -> int | None:
+    raw = text_value(value)
+    if not raw:
+        return None
+    match = YEAR_PATTERN.search(raw)
+    return int(match.group(1)) if match else None
 
 
 def parse_duration_minutes(value: Any) -> int | None:
@@ -246,11 +276,20 @@ class GenericWebPageParser(ResourceParser):
         document.feed(response.text)
         schema = choose_media_schema(parse_json_ld(document.json_ld_blocks))
         meta = document.meta
+        meta_values = document.meta_values
 
         title = (
             text_value(schema.get("name") or schema.get("headline"))
-            or meta.get("og:title")
-            or meta.get("twitter:title")
+            or first_meta(
+                meta,
+                "og:title",
+                "twitter:title",
+                "title",
+                "movie:title",
+                "video:title",
+                "name",
+                "headline",
+            )
             or document.title
         )
         if not title:
@@ -260,10 +299,15 @@ class GenericWebPageParser(ResourceParser):
         canonical_url = (
             urljoin(final_url, document.canonical_url) if document.canonical_url else final_url
         )
-        poster_url = (
-            image_url(schema.get("image") or schema.get("thumbnailUrl"))
-            or meta.get("og:image")
-            or meta.get("twitter:image")
+        poster_url = image_url(schema.get("image") or schema.get("thumbnailUrl")) or first_meta(
+            meta,
+            "og:image",
+            "og:image:url",
+            "twitter:image",
+            "twitter:image:src",
+            "image",
+            "thumbnail",
+            "thumbnailurl",
         )
         if poster_url:
             poster_url = urljoin(final_url, poster_url)
@@ -271,11 +315,47 @@ class GenericWebPageParser(ResourceParser):
         source_site = (
             meta.get("og:site_name") or text_value(schema.get("publisher")) or request.hostname
         )
-        description = (
-            text_value(schema.get("description"))
-            or meta.get("og:description")
-            or meta.get("twitter:description")
-            or meta.get("description")
+        description = text_value(schema.get("description")) or first_meta(
+            meta,
+            "og:description",
+            "twitter:description",
+            "description",
+            "movie:description",
+            "video:description",
+            "abstract",
+        )
+        release_value = (
+            schema.get("datePublished")
+            or schema.get("releaseDate")
+            or schema.get("dateCreated")
+            or first_meta(
+                meta,
+                "video:release_date",
+                "movie:release_date",
+                "release_date",
+                "releasedate",
+                "datepublished",
+                "article:published_time",
+                "date",
+                "year",
+            )
+        )
+        release_date = parse_date(release_value)
+        release_year = release_date.year if release_date else parse_release_year(release_value)
+        directors = names(schema.get("director")) + meta_names(
+            meta_values,
+            "director",
+            "directors",
+            "movie:director",
+            "video:director",
+        )
+        actors = names(schema.get("actor") or schema.get("actors")) + meta_names(
+            meta_values,
+            "actor",
+            "actors",
+            "cast",
+            "movie:actor",
+            "video:actor",
         )
         genres = names(schema.get("genre"))
         if len(genres) == 1 and "," in genres[0]:
@@ -287,11 +367,10 @@ class GenericWebPageParser(ResourceParser):
             source_page_url=canonical_url,
             media_type=infer_media_type(schema, meta),
             description=description,
-            release_date=parse_date(
-                schema.get("datePublished") or meta.get("article:published_time")
-            ),
-            directors=names(schema.get("director")),
-            actors=names(schema.get("actor")),
+            release_year=release_year,
+            release_date=release_date,
+            directors=directors,
+            actors=actors,
             genres=genres,
             duration_minutes=parse_duration_minutes(schema.get("duration")),
             rating=parse_rating(schema.get("aggregateRating")),

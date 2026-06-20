@@ -17,6 +17,7 @@ R05 增加低优先级的 `GenericWebPageParser`。当 URL 没有专用网站解
 - 网站名称和规范页面地址；
 - 影视类型；
 - 上映日期；
+- 上映年份；
 - 导演、演员和类别；
 - 时长和评分；
 - 海报地址。
@@ -47,3 +48,6 @@ result = await registry.parse_url("https://example.com/movie/1")
 解析器构造函数允许注入异步网页获取器，便于测试以及未来替换代理、缓存或限流实现。
 
 本次迭代不修改数据库结构，不需要新增 Alembic 迁移，也不新增第三方依赖。
+
+标题、简介、海报、上映年份以及演职员的详细候选字段和优先级参见
+[R06-R10 网页影片核心信息解析](webpage-core-metadata-parsing.md)。

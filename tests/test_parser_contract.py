@@ -161,6 +161,7 @@ def test_parse_result_normalizes_lists_and_serializes_standard_data():
     assert result.directors == ("Director",)
     assert result.tags == ("Favorite",)
     assert serialized["release_date"] == "2025-06-01"
+    assert serialized["release_year"] == 2025
     assert serialized["media_type"] == "movie"
     assert serialized["downloads"][0]["resource_type"] == "video"
     assert result.to_media_values()["title"] == "Example Movie"
@@ -183,6 +184,17 @@ def test_parse_result_rejects_invalid_media_values(payload):
             source_site="Example",
             source_page_url="https://example.com/movie/1",
             **payload,
+        )
+
+
+def test_parse_result_requires_release_year_to_match_release_date():
+    with pytest.raises(ValueError, match="上映年份"):
+        ParseResult(
+            title="Movie",
+            source_site="Example",
+            source_page_url="https://example.com/movie/1",
+            release_year=2024,
+            release_date="2025-01-01",
         )
 
 
