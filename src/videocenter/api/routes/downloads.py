@@ -9,7 +9,14 @@ from videocenter.core.exceptions import BadRequestError, NotFoundError
 from videocenter.models.download import DownloadTask
 from videocenter.models.media import Media
 from videocenter.schemas.download import DownloadCreate, DownloadRead
-from videocenter.services.downloads import cancel_download, safe_target_name, start_download
+from videocenter.services.downloads import (
+    cancel_download,
+    pause_download,
+    resume_download,
+    retry_download,
+    safe_target_name,
+    start_download,
+)
 
 router = APIRouter()
 
@@ -59,3 +66,36 @@ def cancel(
     if not task:
         raise NotFoundError("下载任务不存在", code="DOWNLOAD_TASK_NOT_FOUND")
     return cancel_download(db, task)
+
+
+@router.post("/{task_id}/pause", response_model=DownloadRead)
+def pause(
+    task_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(DownloadTask, task_id)
+    if not task:
+        raise NotFoundError("下载任务不存在", code="DOWNLOAD_TASK_NOT_FOUND")
+    return pause_download(db, task)
+
+
+@router.post("/{task_id}/resume", response_model=DownloadRead)
+def resume(
+    task_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(DownloadTask, task_id)
+    if not task:
+        raise NotFoundError("下载任务不存在", code="DOWNLOAD_TASK_NOT_FOUND")
+    return resume_download(db, task)
+
+
+@router.post("/{task_id}/retry", response_model=DownloadRead)
+def retry(
+    task_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(DownloadTask, task_id)
+    if not task:
+        raise NotFoundError("下载任务不存在", code="DOWNLOAD_TASK_NOT_FOUND")
+    return retry_download(db, task)

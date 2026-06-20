@@ -1,3 +1,5 @@
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -128,3 +130,25 @@ def test_cancellation_token_is_cooperative():
             ),
             cancellation_token=token,
         )
+
+
+def test_cancellation_token_can_pause_and_resume_work():
+    token = DownloadCancellationToken()
+    resumed = threading.Event()
+
+    token.pause()
+    worker = threading.Thread(
+        target=lambda: (token.wait_if_paused(), resumed.set()),
+        daemon=True,
+    )
+    worker.start()
+    time.sleep(0.02)
+
+    assert token.is_paused is True
+    assert resumed.is_set() is False
+
+    token.resume()
+    worker.join(timeout=1)
+
+    assert token.is_paused is False
+    assert resumed.is_set() is True

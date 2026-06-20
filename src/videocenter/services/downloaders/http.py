@@ -58,7 +58,11 @@ class HttpDirectDownloader(Downloader):
                 temp_path.open("wb") as output,
             ):
                 total_bytes = self._content_length(response.headers.get("Content-Length"))
-                while chunk := response.read(request.chunk_size):
+                while True:
+                    token.wait_if_paused()
+                    chunk = response.read(request.chunk_size)
+                    if not chunk:
+                        break
                     token.raise_if_cancelled()
                     output.write(chunk)
                     downloaded_bytes += len(chunk)

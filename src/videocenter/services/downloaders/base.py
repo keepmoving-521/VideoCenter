@@ -128,13 +128,32 @@ ProgressCallback = Callable[[DownloadProgress], None]
 class DownloadCancellationToken:
     def __init__(self) -> None:
         self._event = Event()
+        self._resume_event = Event()
+        self._resume_event.set()
 
     def cancel(self) -> None:
         self._event.set()
+        self._resume_event.set()
+
+    def pause(self) -> None:
+        self._resume_event.clear()
+
+    def resume(self) -> None:
+        self._resume_event.set()
 
     @property
     def is_cancelled(self) -> bool:
         return self._event.is_set()
+
+    @property
+    def is_paused(self) -> bool:
+        return not self._resume_event.is_set()
+
+    def wait_if_paused(self) -> None:
+        while self.is_paused:
+            self.raise_if_cancelled()
+            self._resume_event.wait(timeout=0.1)
+        self.raise_if_cancelled()
 
     def raise_if_cancelled(self) -> None:
         if self.is_cancelled:

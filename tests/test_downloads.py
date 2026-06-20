@@ -41,6 +41,33 @@ class FakeDownloader(Downloader):
         )
 
 
+class StubDownloadQueue:
+    def __init__(self) -> None:
+        self.queued: list[int] = []
+        self.paused: set[int] = set()
+        self.running: set[int] = set()
+
+    def enqueue(self, task_id: int) -> bool:
+        self.queued.append(task_id)
+        return True
+
+    def pause(self, task_id: int) -> bool:
+        self.paused.add(task_id)
+        return True
+
+    def resume(self, task_id: int) -> bool:
+        if task_id not in self.paused:
+            return False
+        self.paused.remove(task_id)
+        return True
+
+    def cancel(self, task_id: int) -> bool:
+        return True
+
+    def is_running(self, task_id: int) -> bool:
+        return task_id in self.running
+
+
 def test_safe_target_name_removes_unsafe_characters():
     assert safe_target_name("../my:video?.mp4") == "my_video_.mp4"
 
@@ -108,3 +135,99 @@ def test_created_download_task_starts_in_waiting_status(
     assert response.json()["speed_bytes_per_second"] is None
     assert response.json()["remaining_seconds"] is None
     assert queued_ids == [response.json()["id"]]
+
+
+def test_download_pause_resume_cancel_and_retry_api(
+    api_client: TestClient,
+    api_assertions,
+    db_session: Session,
+    model_factory,
+    monkeypatch,
+):
+    task_queue = StubDownloadQueue()
+    monkeypatch.setattr(
+        "videocenter.services.downloads.get_download_queue",
+        lambda: task_queue,
+    )
+    task = model_factory.download_task(
+        status=DownloadStatus.DOWNLOADING,
+        progress=50,
+        downloaded_bytes=500,
+        total_bytes=1000,
+        speed_bytes_per_second=100,
+        remaining_seconds=5,
+    )
+
+    paused = api_assertions.assert_status(
+        api_client.post(f"/api/v1/downloads/{task.id}/pause"),
+        200,
+    )
+    assert paused["status"] == "paused"
+    assert paused["speed_bytes_per_second"] is None
+    assert paused["remaining_seconds"] is None
+
+    task_queue.running.add(task.id)
+    resumed = api_assertions.assert_status(
+        api_client.post(f"/api/v1/downloads/{task.id}/resume"),
+        200,
+    )
+    assert resumed["status"] == "downloading"
+
+    cancelled = api_assertions.assert_status(
+        api_client.post(f"/api/v1/downloads/{task.id}/cancel"),
+        200,
+    )
+    assert cancelled["status"] == "cancelled"
+
+    db_session.expire_all()
+    failed_task = model_factory.download_task(
+        status=DownloadStatus.FAILED,
+        progress=75,
+        downloaded_bytes=750,
+        total_bytes=1000,
+        speed_bytes_per_second=None,
+        remaining_seconds=None,
+        error_message="network failed",
+        target_path="data/media/failed.mp4",
+    )
+    retried = api_assertions.assert_status(
+        api_client.post(f"/api/v1/downloads/{failed_task.id}/retry"),
+        200,
+    )
+    assert retried["status"] == "waiting"
+    assert retried["progress"] == 0
+    assert retried["downloaded_bytes"] == 0
+    assert retried["total_bytes"] is None
+    assert retried["error_message"] is None
+    assert failed_task.id in task_queue.queued
+
+
+@pytest.mark.parametrize(
+    ("status", "action", "error_code"),
+    [
+        (DownloadStatus.COMPLETED, "pause", "DOWNLOAD_NOT_PAUSABLE"),
+        (DownloadStatus.WAITING, "resume", "DOWNLOAD_NOT_RESUMABLE"),
+        (DownloadStatus.COMPLETED, "cancel", "DOWNLOAD_NOT_CANCELLABLE"),
+        (DownloadStatus.CANCELLED, "retry", "DOWNLOAD_NOT_RETRYABLE"),
+    ],
+)
+def test_download_actions_reject_invalid_states(
+    api_client: TestClient,
+    api_assertions,
+    model_factory,
+    monkeypatch,
+    status,
+    action,
+    error_code,
+):
+    monkeypatch.setattr(
+        "videocenter.services.downloads.get_download_queue",
+        lambda: StubDownloadQueue(),
+    )
+    task = model_factory.download_task(status=status)
+
+    api_assertions.assert_error(
+        api_client.post(f"/api/v1/downloads/{task.id}/{action}"),
+        status_code=409,
+        code=error_code,
+    )

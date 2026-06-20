@@ -45,9 +45,29 @@ class DownloadTaskQueue:
         token.cancel()
         return True
 
+    def pause(self, task_id: int) -> bool:
+        with self._lock:
+            token = self._tokens.get(task_id)
+        if token is None:
+            return False
+        token.pause()
+        return True
+
+    def resume(self, task_id: int) -> bool:
+        with self._lock:
+            token = self._tokens.get(task_id)
+        if token is None:
+            return False
+        token.resume()
+        return True
+
     def contains(self, task_id: int) -> bool:
         with self._lock:
             return task_id in self._tokens
+
+    def is_running(self, task_id: int) -> bool:
+        with self._lock:
+            return task_id in self._running_ids
 
     @property
     def waiting_count(self) -> int:
@@ -77,6 +97,7 @@ class DownloadTaskQueue:
                     token = self._tokens[task_id]
                     self._running_ids.add(task_id)
                 if not token.is_cancelled:
+                    token.wait_if_paused()
                     self._runner(task_id, token)
             finally:
                 if task_id is not None:

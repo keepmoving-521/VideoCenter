@@ -20,6 +20,7 @@ from videocenter.core.database import Base
 class DownloadStatus(StrEnum):
     WAITING = "waiting"
     DOWNLOADING = "downloading"
+    PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
