@@ -14,6 +14,7 @@ from videocenter.services.downloads import (
     generate_target_name,
     normalized_download_source,
     pause_download,
+    resolve_download_directory,
     resume_download,
     retry_download,
     safe_target_name,
@@ -52,6 +53,13 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
             },
         )
     try:
+        _, target_directory = resolve_download_directory(payload.target_directory)
+    except ValueError as exc:
+        raise BadRequestError(
+            str(exc),
+            code="INVALID_TARGET_DIRECTORY",
+        ) from exc
+    try:
         target_name = (
             safe_target_name(payload.target_name)
             if payload.target_name is not None
@@ -66,6 +74,8 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
         media_id=payload.media_id,
         source_url=source_url,
         target_name=target_name,
+        target_directory=target_directory,
+        expected_sha256=payload.expected_sha256,
         priority=payload.priority,
     )
     db.add(task)

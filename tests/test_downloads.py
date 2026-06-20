@@ -1,3 +1,6 @@
+import hashlib
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -12,7 +15,13 @@ from videocenter.services.downloaders import (
     DownloadProgressState,
     DownloadResult,
 )
-from videocenter.services.downloads import _run_download, generate_target_name, safe_target_name
+from videocenter.services.downloads import (
+    _run_download,
+    generate_target_name,
+    register_local_resource,
+    resolve_download_directory,
+    safe_target_name,
+)
 
 
 class FakeDownloader(Downloader):
@@ -38,6 +47,7 @@ class FakeDownloader(Downloader):
             target_path=request.target_path.resolve(),
             file_size=10,
             mime_type="video/mp4",
+            checksum="a" * 64,
         )
 
 
@@ -106,6 +116,7 @@ def test_download_task_execution_uses_downloader_result(
     assert completed_task.total_bytes == 10
     assert completed_task.speed_bytes_per_second == 2
     assert completed_task.remaining_seconds == 0
+    assert completed_task.checksum_sha256 == "a" * 64
     assert completed_task.target_path.endswith("contract-video.mp4")
     resource = db_session.scalar(select(LocalResource).where(LocalResource.media_id == media.id))
     assert resource is not None
@@ -177,6 +188,54 @@ def test_download_priority_and_generated_target_name(
     assert queued == [(payload["id"], 80)]
 
 
+def test_download_can_select_directory_and_expected_checksum(
+    api_client: TestClient,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "videocenter.api.routes.downloads.start_download",
+        lambda task_id, *, priority=0: None,
+    )
+    checksum = hashlib.sha256(b"content").hexdigest()
+
+    response = api_client.post(
+        "/api/v1/downloads",
+        json={
+            "source_url": "https://example.com/movie.mp4",
+            "target_directory": "movies/action",
+            "expected_sha256": checksum.upper(),
+        },
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["target_directory"] == "movies/action"
+    assert payload["expected_sha256"] == checksum
+    assert payload["checksum_sha256"] is None
+
+
+@pytest.mark.parametrize(
+    "target_directory",
+    ["../outside", "..\\outside"],
+)
+def test_download_rejects_directory_outside_media_root(
+    api_client: TestClient,
+    api_assertions,
+    target_directory,
+):
+    api_assertions.assert_error(
+        api_client.post(
+            "/api/v1/downloads",
+            json={
+                "source_url": "https://example.com/movie.mp4",
+                "target_directory": target_directory,
+            },
+        ),
+        status_code=400,
+        code="INVALID_TARGET_DIRECTORY",
+    )
+
+
 def test_generated_target_name_uses_url_and_stable_hash():
     first = generate_target_name("https://example.com/videos/movie.mkv?token=one")
     second = generate_target_name("https://example.com/videos/movie.mkv?token=two")
@@ -226,6 +285,42 @@ def test_duplicate_download_is_rejected_but_cancelled_task_can_be_recreated(
         json={"source_url": source_url},
     )
     assert response.status_code == 202
+
+
+def test_resolve_download_directory_stays_under_media_root():
+    directory, stored = resolve_download_directory("series/season-01")
+
+    assert directory.is_relative_to(directory.parents[1])
+    assert stored == "series/season-01"
+
+
+def test_local_resource_registration_is_idempotent(
+    db_session: Session,
+    model_factory,
+    tmp_path: Path,
+):
+    media = model_factory.media(title="Registered")
+    task = model_factory.download_task(media=media)
+    target = (tmp_path / "registered.mp4").resolve()
+    result = DownloadResult(
+        target_path=target,
+        file_size=100,
+        mime_type="video/mp4",
+        checksum="b" * 64,
+    )
+
+    first = register_local_resource(db_session, task=task, result=result)
+    db_session.commit()
+    result = result.model_copy(update={"file_size": 200})
+    second = register_local_resource(db_session, task=task, result=result)
+    db_session.commit()
+
+    assert first.id == second.id
+    assert second.file_size == 200
+    resources = db_session.scalars(
+        select(LocalResource).where(LocalResource.file_path == str(target))
+    ).all()
+    assert len(resources) == 1
 
 
 def test_download_pause_resume_cancel_and_retry_api(

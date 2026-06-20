@@ -1,3 +1,4 @@
+import hashlib
 import mimetypes
 import time
 import urllib.request
@@ -35,6 +36,7 @@ class HttpDirectDownloader(Downloader):
         downloaded_bytes = 0
         total_bytes: int | None = None
         started_at = time.monotonic()
+        checksum = hashlib.sha256()
 
         try:
             token.raise_if_cancelled()
@@ -65,6 +67,7 @@ class HttpDirectDownloader(Downloader):
                         break
                     token.raise_if_cancelled()
                     output.write(chunk)
+                    checksum.update(chunk)
                     downloaded_bytes += len(chunk)
                     elapsed = max(time.monotonic() - started_at, 0.000001)
                     reported_total = (
@@ -83,6 +86,16 @@ class HttpDirectDownloader(Downloader):
                     )
 
             token.raise_if_cancelled()
+            if total_bytes is not None and downloaded_bytes != total_bytes:
+                raise DownloadError(
+                    f"下载文件大小不完整：预期 {total_bytes} 字节，实际 {downloaded_bytes} 字节"
+                )
+            checksum_sha256 = checksum.hexdigest()
+            if request.expected_sha256 is not None and checksum_sha256 != request.expected_sha256:
+                raise DownloadError(
+                    "下载文件 SHA-256 校验失败："
+                    f"预期 {request.expected_sha256}，实际 {checksum_sha256}"
+                )
             self._report(
                 progress_callback,
                 DownloadProgress(
@@ -104,6 +117,7 @@ class HttpDirectDownloader(Downloader):
                     else mimetypes.guess_type(target_path.name)[0]
                 )
                 or "application/octet-stream",
+                checksum=checksum_sha256,
             )
         except DownloadCancelledError:
             raise

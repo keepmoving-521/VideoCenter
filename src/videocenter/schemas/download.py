@@ -12,6 +12,13 @@ INVALID_FILE_NAME_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 class DownloadCreate(ApiRequestModel):
     source_url: HttpUrl
     target_name: str | None = Field(default=None, min_length=1, max_length=512)
+    target_directory: str | None = Field(default=None, max_length=1024)
+    expected_sha256: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+        pattern=r"^[0-9a-fA-F]{64}$",
+    )
     media_id: PositiveId | None = None
     priority: int = Field(default=0, ge=-100, le=100)
 
@@ -27,6 +34,21 @@ class DownloadCreate(ApiRequestModel):
             raise ValueError("目标文件名不能以点或空格结尾")
         return value
 
+    @field_validator("target_directory")
+    @classmethod
+    def validate_target_directory(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if "\x00" in value:
+            raise ValueError("目标目录不能包含空字符")
+        return value or None
+
+    @field_validator("expected_sha256")
+    @classmethod
+    def normalize_expected_sha256(cls, value: str | None) -> str | None:
+        return value.casefold() if value is not None else None
+
 
 class DownloadRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -35,6 +57,10 @@ class DownloadRead(BaseModel):
     media_id: int | None
     source_url: str
     target_name: str
+    target_directory: str
+    target_path: str | None
+    expected_sha256: str | None
+    checksum_sha256: str | None
     status: DownloadStatus
     priority: int
     progress: float

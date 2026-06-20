@@ -1,3 +1,4 @@
+import hashlib
 from email.message import Message
 from io import BytesIO
 from pathlib import Path
@@ -15,10 +16,18 @@ from videocenter.services.downloaders import (
 
 
 class FakeResponse(BytesIO):
-    def __init__(self, content: bytes, *, content_type: str = "video/mp4") -> None:
+    def __init__(
+        self,
+        content: bytes,
+        *,
+        content_type: str = "video/mp4",
+        content_length: int | None = None,
+    ) -> None:
         super().__init__(content)
         self.headers = Message()
-        self.headers["Content-Length"] = str(len(content))
+        self.headers["Content-Length"] = str(
+            len(content) if content_length is None else content_length
+        )
         self.headers["Content-Type"] = content_type
 
     def __enter__(self):
@@ -53,6 +62,7 @@ def test_http_direct_downloader_writes_file_and_reports_progress(
     assert result.target_path == target.resolve()
     assert result.file_size == len(content)
     assert result.mime_type == "video/mp4"
+    assert result.checksum == hashlib.sha256(content).hexdigest()
     assert [update.state for update in updates] == [
         DownloadProgressState.STARTING,
         DownloadProgressState.DOWNLOADING,
@@ -156,3 +166,56 @@ def test_http_direct_downloader_wraps_transport_errors(
                 target_path=tmp_path / "movie.mp4",
             )
         )
+
+
+def test_http_direct_downloader_rejects_incomplete_content_length(
+    tmp_path: Path,
+    monkeypatch,
+):
+    target = tmp_path / "movie.mp4"
+    monkeypatch.setattr(
+        "videocenter.services.downloaders.http.urllib.request.urlopen",
+        lambda request, timeout: FakeResponse(b"short", content_length=100),
+    )
+
+    with pytest.raises(DownloadError, match="大小不完整"):
+        HttpDirectDownloader().download(
+            DownloadRequest(
+                source_url="https://example.com/movie.mp4",
+                target_path=target,
+            )
+        )
+
+    assert not target.exists()
+    assert not target.with_suffix(".mp4.part").exists()
+
+
+def test_http_direct_downloader_verifies_expected_sha256(
+    tmp_path: Path,
+    monkeypatch,
+):
+    content = b"verified-content"
+    expected = hashlib.sha256(content).hexdigest()
+    monkeypatch.setattr(
+        "videocenter.services.downloaders.http.urllib.request.urlopen",
+        lambda request, timeout: FakeResponse(content),
+    )
+
+    result = HttpDirectDownloader().download(
+        DownloadRequest(
+            source_url="https://example.com/movie.mp4",
+            target_path=tmp_path / "valid.mp4",
+            expected_sha256=expected.upper(),
+        )
+    )
+    assert result.checksum == expected
+
+    with pytest.raises(DownloadError, match="SHA-256"):
+        HttpDirectDownloader().download(
+            DownloadRequest(
+                source_url="https://example.com/movie.mp4",
+                target_path=tmp_path / "invalid.mp4",
+                expected_sha256="0" * 64,
+            )
+        )
+    assert not (tmp_path / "invalid.mp4").exists()

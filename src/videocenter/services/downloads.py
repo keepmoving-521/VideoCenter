@@ -192,6 +192,44 @@ def generate_target_name(
     return f"{trimmed_base}-{digest}{safe_suffix}"
 
 
+def resolve_download_directory(requested_directory: str | None) -> tuple[Path, str]:
+    root = get_settings().media_root.resolve()
+    if requested_directory is None:
+        return root, ""
+    requested_path = Path(requested_directory)
+    candidate = (
+        requested_path.expanduser().resolve()
+        if requested_path.is_absolute()
+        else (root / requested_path).resolve()
+    )
+    if not candidate.is_relative_to(root):
+        raise ValueError("下载目标目录必须位于媒体根目录内")
+    relative = candidate.relative_to(root)
+    return candidate, "" if relative == Path(".") else relative.as_posix()
+
+
+def cleanup_download_temp_file(target_path: Path) -> None:
+    target_path.with_suffix(target_path.suffix + ".part").unlink(missing_ok=True)
+
+
+def register_local_resource(
+    db: Session,
+    *,
+    task: DownloadTask,
+    result,
+) -> LocalResource:
+    normalized_path = str(result.target_path.resolve())
+    resource = db.scalar(select(LocalResource).where(LocalResource.file_path == normalized_path))
+    if resource is None:
+        resource = LocalResource(file_path=normalized_path)
+        db.add(resource)
+    resource.media_id = task.media_id
+    resource.file_name = result.target_path.name
+    resource.file_size = result.file_size
+    resource.mime_type = result.mime_type or "application/octet-stream"
+    return resource
+
+
 def _run_download(
     task_id: int,
     cancellation_token: DownloadCancellationToken,
@@ -215,13 +253,15 @@ def _run_download(
             task.error_message = None
             db.commit()
 
-            target = get_settings().media_root / safe_target_name(task.target_name)
+            target_directory, _ = resolve_download_directory(task.target_directory)
+            target = target_directory / safe_target_name(task.target_name)
             request = DownloadRequest(
                 source_url=task.source_url,
                 target_path=target,
                 headers={"User-Agent": "VideoCenter/0.1"},
                 timeout_seconds=30,
                 overwrite=True,
+                expected_sha256=task.expected_sha256,
             )
 
             def update_progress(progress: DownloadProgress) -> None:
@@ -251,16 +291,9 @@ def _run_download(
             task.downloaded_bytes = result.file_size
             task.total_bytes = result.file_size
             task.remaining_seconds = 0
+            task.checksum_sha256 = result.checksum
             task.status = DownloadStatus.COMPLETED
-            db.add(
-                LocalResource(
-                    media_id=task.media_id,
-                    file_path=str(result.target_path),
-                    file_name=result.target_path.name,
-                    file_size=result.file_size,
-                    mime_type=result.mime_type or "application/octet-stream",
-                )
-            )
+            register_local_resource(db, task=task, result=result)
             db.commit()
     except DownloadCancelledError:
         with SessionLocal() as db:
@@ -283,3 +316,5 @@ def _run_download(
                 task.remaining_seconds = None
                 task.error_message = str(exc)
                 db.commit()
+                target_directory, _ = resolve_download_directory(task.target_directory)
+                cleanup_download_temp_file(target_directory / safe_target_name(task.target_name))

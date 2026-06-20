@@ -56,7 +56,14 @@ class DownloadTask(Base):
     media_id: Mapped[int | None] = mapped_column(ForeignKey("media.id"), index=True)
     source_url: Mapped[str] = mapped_column(String(2048))
     target_name: Mapped[str] = mapped_column(String(512))
+    target_directory: Mapped[str] = mapped_column(
+        String(1024),
+        default="",
+        server_default="",
+    )
     target_path: Mapped[str | None] = mapped_column(String(2048))
+    expected_sha256: Mapped[str | None] = mapped_column(String(64))
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[DownloadStatus] = mapped_column(
         Enum(DownloadStatus), default=DownloadStatus.WAITING, index=True
     )

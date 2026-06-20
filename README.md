@@ -177,6 +177,9 @@ python -m pytest
 下载并发数、优先级、重复检测和自动文件名规则请参阅
 [下载队列增强文档](docs/download-concurrency-priority-dedup-naming.md)。
 
+目标目录、文件完整性、失败清理和本地资源登记请参阅
+[下载落盘与完整性文档](docs/download-destination-integrity-registration.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

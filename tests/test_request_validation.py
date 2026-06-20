@@ -212,6 +212,12 @@ def test_download_target_name_is_optional_and_priority_is_bounded():
             priority=101,
         )
 
+    with pytest.raises(ValidationError):
+        DownloadCreate(
+            source_url="https://example.com/movie.mp4",
+            expected_sha256="not-a-checksum",
+        )
+
 
 def test_history_position_cannot_exceed_duration():
     with pytest.raises(ValidationError, match="播放位置不能超过视频总时长"):

@@ -42,6 +42,12 @@ class DownloadRequest(DownloaderDataModel):
     timeout_seconds: float = Field(default=30, gt=0, le=3600)
     chunk_size: int = Field(default=1024 * 1024, ge=1024, le=64 * 1024 * 1024)
     overwrite: bool = False
+    expected_sha256: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+        pattern=r"^[0-9a-fA-F]{64}$",
+    )
 
     @field_validator("source_url")
     @classmethod
@@ -68,6 +74,11 @@ class DownloadRequest(DownloaderDataModel):
                 raise ValueError("请求头内容不能包含换行符")
             normalized[normalized_name] = normalized_value
         return normalized
+
+    @field_validator("expected_sha256")
+    @classmethod
+    def normalize_expected_sha256(cls, value: str | None) -> str | None:
+        return value.casefold() if value is not None else None
 
     @property
     def scheme(self) -> str:

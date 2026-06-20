@@ -44,5 +44,6 @@
 - [D05～D07：实时下载进度、速度与剩余时间](download-realtime-metrics.md)
 - [D08～D11：下载任务暂停、恢复、取消与重试](download-task-controls.md)
 - [D12～D15：并发数、任务优先级、重复检测与文件名规则](download-concurrency-priority-dedup-naming.md)
+- [D16～D19：目标目录、完整性校验、临时文件清理与资源登记](download-destination-integrity-registration.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。
