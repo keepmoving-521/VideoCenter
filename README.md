@@ -239,6 +239,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 并发重复解析合并和解析器单元测试范围请参阅
 [防止重复解析与解析器测试文档](docs/duplicate-parsing-and-parser-tests.md)。
 
+影视资源列表的分页参数和响应结构请参阅
+[影视资源分页查询文档](docs/media-pagination.md)。
+
 ## 项目结构
 
 ```text

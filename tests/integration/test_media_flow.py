@@ -69,13 +69,14 @@ def test_media_crud_flow(
         200,
     )
     assert listed is not None
-    assert [item["id"] for item in listed] == [media_id]
+    assert [item["id"] for item in listed["items"]] == [media_id]
+    assert listed["total"] == 1
 
     favorites = api_assertions.assert_status(
         api_client.get("/api/v1/media", params={"is_favorite": "true"}),
         200,
     )
-    assert [item["id"] for item in favorites] == [media_id]
+    assert [item["id"] for item in favorites["items"]] == [media_id]
 
     updated = api_assertions.assert_status(
         api_client.patch(
@@ -107,7 +108,8 @@ def test_media_crud_flow(
         api_client.get("/api/v1/media", params={"is_favorite": "true"}),
         200,
     )
-    assert favorites == []
+    assert favorites["items"] == []
+    assert favorites["total"] == 0
 
     cleared = api_assertions.assert_status(
         api_client.patch(

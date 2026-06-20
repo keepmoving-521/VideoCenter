@@ -299,6 +299,16 @@ class MediaRead(BaseModel):
     tags: list[TagRead] = Field(default_factory=list)
 
 
+class MediaPage(BaseModel):
+    items: list[MediaRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool
+
+
 class LocalScanRequest(ApiRequestModel):
     path: str | None = Field(default=None, min_length=1, max_length=2048)
     media_id: PositiveId | None = None
