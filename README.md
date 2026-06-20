@@ -168,6 +168,9 @@ python -m pytest
 下载任务排队、并发工作线程和状态流转请参阅
 [下载任务队列与状态文档](docs/download-queue-statuses.md)。
 
+下载进度、实时速度和剩余时间字段请参阅
+[实时下载指标文档](docs/download-realtime-metrics.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

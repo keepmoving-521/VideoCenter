@@ -51,7 +51,14 @@ def restore_download_queue() -> int:
         db.execute(
             update(DownloadTask)
             .where(DownloadTask.status == DownloadStatus.DOWNLOADING)
-            .values(status=DownloadStatus.WAITING, progress=0)
+            .values(
+                status=DownloadStatus.WAITING,
+                progress=0,
+                downloaded_bytes=0,
+                total_bytes=None,
+                speed_bytes_per_second=None,
+                remaining_seconds=None,
+            )
         )
         waiting_ids = db.scalars(
             select(DownloadTask.id)
@@ -67,6 +74,8 @@ def cancel_download(db: Session, task: DownloadTask) -> DownloadTask:
     get_download_queue().cancel(task.id)
     if task.status in {DownloadStatus.WAITING, DownloadStatus.DOWNLOADING}:
         task.status = DownloadStatus.CANCELLED
+        task.speed_bytes_per_second = None
+        task.remaining_seconds = None
         db.commit()
         db.refresh(task)
     return task
@@ -98,9 +107,18 @@ def _run_download(
             )
 
             def update_progress(progress: DownloadProgress) -> None:
+                task.downloaded_bytes = progress.downloaded_bytes
+                if progress.total_bytes is not None:
+                    task.total_bytes = progress.total_bytes
                 if progress.percentage is not None:
                     task.progress = progress.percentage
-                    db.commit()
+                if progress.speed_bytes_per_second is not None:
+                    task.speed_bytes_per_second = round(
+                        progress.speed_bytes_per_second,
+                        2,
+                    )
+                task.remaining_seconds = progress.remaining_seconds
+                db.commit()
 
             result = downloader.download(
                 request,
@@ -109,6 +127,9 @@ def _run_download(
             )
             task.target_path = str(result.target_path)
             task.progress = 100
+            task.downloaded_bytes = result.file_size
+            task.total_bytes = result.file_size
+            task.remaining_seconds = 0
             task.status = DownloadStatus.COMPLETED
             db.add(
                 LocalResource(
@@ -125,11 +146,15 @@ def _run_download(
             task = db.get(DownloadTask, task_id)
             if task:
                 task.status = DownloadStatus.CANCELLED
+                task.speed_bytes_per_second = None
+                task.remaining_seconds = None
                 db.commit()
     except Exception as exc:
         with SessionLocal() as db:
             task = db.get(DownloadTask, task_id)
             if task and task.status != DownloadStatus.CANCELLED:
                 task.status = DownloadStatus.FAILED
+                task.speed_bytes_per_second = None
+                task.remaining_seconds = None
                 task.error_message = str(exc)
                 db.commit()

@@ -79,12 +79,23 @@ def test_download_progress_reports_percentage():
     )
 
     assert progress.percentage == 25
+    assert progress.remaining_seconds == 7.5
     with pytest.raises(ValueError):
         DownloadProgress(
             state="downloading",
             downloaded_bytes=101,
             total_bytes=100,
         )
+
+    assert (
+        DownloadProgress(
+            state="downloading",
+            downloaded_bytes=25,
+            total_bytes=None,
+            speed_bytes_per_second=10,
+        ).remaining_seconds
+        is None
+    )
 
 
 def test_downloader_contract_supports_progress_and_result():

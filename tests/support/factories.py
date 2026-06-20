@@ -101,6 +101,7 @@ class ModelFactory:
             "target_name": f"test-video-{uuid4().hex}.mp4",
             "status": DownloadStatus.WAITING,
             "progress": 0,
+            "downloaded_bytes": 0,
         }
         values.update(overrides)
         return self._save(DownloadTask(**values))

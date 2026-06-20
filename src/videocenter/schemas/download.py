@@ -33,6 +33,10 @@ class DownloadRead(BaseModel):
     target_name: str
     status: DownloadStatus
     progress: float
+    downloaded_bytes: int
+    total_bytes: int | None
+    speed_bytes_per_second: float | None
+    remaining_seconds: float | None
     error_message: str | None
     created_at: datetime
     updated_at: datetime

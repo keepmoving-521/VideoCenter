@@ -31,6 +31,7 @@ class FakeDownloader(Downloader):
                     state=DownloadProgressState.DOWNLOADING,
                     downloaded_bytes=5,
                     total_bytes=10,
+                    speed_bytes_per_second=2,
                 )
             )
         return DownloadResult(
@@ -70,6 +71,10 @@ def test_download_task_execution_uses_downloader_result(
     completed_task = db_session.get(type(task), task.id)
     assert completed_task.status == DownloadStatus.COMPLETED
     assert completed_task.progress == 100
+    assert completed_task.downloaded_bytes == 10
+    assert completed_task.total_bytes == 10
+    assert completed_task.speed_bytes_per_second == 2
+    assert completed_task.remaining_seconds == 0
     assert completed_task.target_path.endswith("contract-video.mp4")
     resource = db_session.scalar(select(LocalResource).where(LocalResource.media_id == media.id))
     assert resource is not None
@@ -97,4 +102,9 @@ def test_created_download_task_starts_in_waiting_status(
 
     assert response.status_code == 202
     assert response.json()["status"] == "waiting"
+    assert response.json()["progress"] == 0
+    assert response.json()["downloaded_bytes"] == 0
+    assert response.json()["total_bytes"] is None
+    assert response.json()["speed_bytes_per_second"] is None
+    assert response.json()["remaining_seconds"] is None
     assert queued_ids == [response.json()["id"]]

@@ -102,6 +102,17 @@ class DownloadProgress(DownloaderDataModel):
             return None
         return round(self.downloaded_bytes / self.total_bytes * 100, 2)
 
+    @property
+    def remaining_seconds(self) -> float | None:
+        if (
+            self.total_bytes is None
+            or self.speed_bytes_per_second is None
+            or self.speed_bytes_per_second <= 0
+        ):
+            return None
+        remaining_bytes = max(self.total_bytes - self.downloaded_bytes, 0)
+        return round(remaining_bytes / self.speed_bytes_per_second, 2)
+
 
 class DownloadResult(DownloaderDataModel):
     target_path: Path
