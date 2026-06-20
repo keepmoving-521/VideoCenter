@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from videocenter.models.download import DownloadStatus
-from videocenter.models.media import LocalResource
+from videocenter.models.media import LocalResource, MediaStatus
 from videocenter.services.downloaders import (
     DownloadCancellationToken,
     Downloader,
@@ -20,6 +20,7 @@ from videocenter.services.downloads import (
     generate_target_name,
     register_local_resource,
     resolve_download_directory,
+    restore_download_queue,
     safe_target_name,
 )
 
@@ -49,6 +50,19 @@ class FakeDownloader(Downloader):
             mime_type="video/mp4",
             checksum="a" * 64,
         )
+
+
+class FailingDownloader(Downloader):
+    name = "failing"
+
+    def download(
+        self,
+        request,
+        *,
+        progress_callback=None,
+        cancellation_token=None,
+    ):
+        raise RuntimeError("simulated failure")
 
 
 class StubDownloadQueue:
@@ -122,6 +136,8 @@ def test_download_task_execution_uses_downloader_result(
     assert resource is not None
     assert resource.file_size == 10
     assert resource.mime_type == "video/mp4"
+    db_session.refresh(media)
+    assert media.status == MediaStatus.AVAILABLE
 
 
 def test_created_download_task_starts_in_waiting_status(
@@ -157,6 +173,31 @@ def test_created_download_task_starts_in_waiting_status(
     assert response.json()["remaining_seconds"] is None
     assert queued_ids == [response.json()["id"]]
     assert queued_priorities == [0]
+
+
+def test_created_linked_download_updates_media_status(
+    api_client: TestClient,
+    db_session: Session,
+    model_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "videocenter.api.routes.downloads.start_download",
+        lambda task_id, *, priority=0: None,
+    )
+    media = model_factory.media(status=MediaStatus.PENDING)
+
+    response = api_client.post(
+        "/api/v1/downloads",
+        json={
+            "source_url": "https://example.com/linked.mp4",
+            "media_id": media.id,
+        },
+    )
+
+    assert response.status_code == 202
+    db_session.refresh(media)
+    assert media.status == MediaStatus.DOWNLOADING
 
 
 def test_download_priority_and_generated_target_name(
@@ -321,6 +362,120 @@ def test_local_resource_registration_is_idempotent(
         select(LocalResource).where(LocalResource.file_path == str(target))
     ).all()
     assert len(resources) == 1
+
+
+def test_failed_download_restores_media_to_pending(
+    db_session: Session,
+    model_factory,
+):
+    media = model_factory.media(status=MediaStatus.DOWNLOADING)
+    task = model_factory.download_task(
+        media=media,
+        source_url="https://example.com/failure.mp4",
+    )
+
+    _run_download(
+        task.id,
+        DownloadCancellationToken(),
+        downloader=FailingDownloader(),
+    )
+
+    db_session.expire_all()
+    assert db_session.get(type(task), task.id).status == DownloadStatus.FAILED
+    assert db_session.get(type(media), media.id).status == MediaStatus.PENDING
+
+
+def test_failed_download_keeps_media_available_when_local_resource_exists(
+    db_session: Session,
+    model_factory,
+):
+    media = model_factory.media(status=MediaStatus.AVAILABLE)
+    model_factory.local_resource(media=media)
+    task = model_factory.download_task(
+        media=media,
+        source_url="https://example.com/extra-failure.mp4",
+    )
+
+    _run_download(
+        task.id,
+        DownloadCancellationToken(),
+        downloader=FailingDownloader(),
+    )
+
+    db_session.expire_all()
+    assert db_session.get(type(media), media.id).status == MediaStatus.AVAILABLE
+
+
+def test_download_task_writes_structured_lifecycle_logs(
+    db_session: Session,
+    model_factory,
+    caplog,
+):
+    caplog.set_level("INFO", logger="videocenter.services.downloads")
+    task = model_factory.download_task(
+        source_url="https://example.com/logged.mp4",
+    )
+
+    _run_download(
+        task.id,
+        DownloadCancellationToken(),
+        downloader=FakeDownloader(),
+    )
+
+    events = [
+        record.download_event for record in caplog.records if hasattr(record, "download_event")
+    ]
+    assert events == ["started", "progress", "completed"]
+    records = [
+        record for record in caplog.records if getattr(record, "download_task_id", None) == task.id
+    ]
+    assert all(record.download_task_id == task.id for record in records)
+
+
+def test_restore_download_queue_recovers_unfinished_tasks_by_priority(
+    db_session: Session,
+    model_factory,
+    monkeypatch,
+    caplog,
+):
+    task_queue = StubDownloadQueue()
+    monkeypatch.setattr(
+        "videocenter.services.downloads.get_download_queue",
+        lambda: task_queue,
+    )
+    caplog.set_level("INFO", logger="videocenter.services.downloads")
+    low = model_factory.download_task(
+        status=DownloadStatus.DOWNLOADING,
+        priority=-10,
+        progress=50,
+        downloaded_bytes=500,
+        total_bytes=1000,
+    )
+    high = model_factory.download_task(
+        status=DownloadStatus.WAITING,
+        priority=80,
+    )
+    paused = model_factory.download_task(
+        status=DownloadStatus.PAUSED,
+        priority=100,
+    )
+
+    restored = restore_download_queue()
+
+    assert restored == 2
+    assert task_queue.queued == [high.id, low.id]
+    db_session.expire_all()
+    recovered = db_session.get(type(low), low.id)
+    assert recovered.status == DownloadStatus.WAITING
+    assert recovered.progress == 0
+    assert recovered.downloaded_bytes == 0
+    assert db_session.get(type(paused), paused.id).status == DownloadStatus.PAUSED
+    restored_ids = [
+        record.download_task_id
+        for record in caplog.records
+        if getattr(record, "download_event", None) == "restored"
+    ]
+    assert restored_ids == [high.id, low.id]
 
 
 def test_download_pause_resume_cancel_and_retry_api(

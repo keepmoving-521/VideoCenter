@@ -1,6 +1,8 @@
 import hashlib
+import logging
 import re
 import threading
+import time
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -11,7 +13,7 @@ from videocenter.core.config import get_settings
 from videocenter.core.database import SessionLocal
 from videocenter.core.exceptions import ConflictError
 from videocenter.models.download import DownloadStatus, DownloadTask
-from videocenter.models.media import LocalResource
+from videocenter.models.media import LocalResource, Media, MediaStatus
 from videocenter.services.download_queue import DownloadTaskQueue
 from videocenter.services.downloaders import (
     DownloadCancellationToken,
@@ -24,6 +26,7 @@ from videocenter.services.downloaders import (
 from videocenter.services.downloaders.base import normalize_download_url
 
 _default_downloader = HttpDirectDownloader()
+logger = logging.getLogger(__name__)
 _queue_lock = threading.Lock()
 _download_queue: DownloadTaskQueue | None = None
 WINDOWS_RESERVED_NAMES = {
@@ -47,7 +50,15 @@ def safe_target_name(name: str) -> str:
 
 
 def start_download(task_id: int, *, priority: int = 0) -> None:
-    get_download_queue().enqueue(task_id, priority=priority)
+    if get_download_queue().enqueue(task_id, priority=priority):
+        logger.info(
+            "Download task queued",
+            extra={
+                "download_event": "queued",
+                "download_task_id": task_id,
+                "priority": priority,
+            },
+        )
 
 
 def get_download_queue() -> DownloadTaskQueue:
@@ -73,16 +84,40 @@ def restore_download_queue() -> int:
                 total_bytes=None,
                 speed_bytes_per_second=None,
                 remaining_seconds=None,
+                target_path=None,
+                checksum_sha256=None,
             )
         )
-        waiting_ids = db.scalars(
+        waiting_tasks = db.scalars(
             select(DownloadTask)
             .where(DownloadTask.status == DownloadStatus.WAITING)
             .order_by(DownloadTask.priority.desc(), DownloadTask.id)
         ).all()
+        paused_tasks = db.scalars(
+            select(DownloadTask)
+            .where(DownloadTask.status == DownloadStatus.PAUSED)
+            .order_by(DownloadTask.id)
+        ).all()
+        for task in [*waiting_tasks, *paused_tasks]:
+            update_media_download_status(db, task.media_id)
+            target_directory, _ = resolve_download_directory(task.target_directory)
+            cleanup_download_temp_file(target_directory / safe_target_name(task.target_name))
         db.commit()
     queue_instance = get_download_queue()
-    return sum(queue_instance.enqueue(task.id, priority=task.priority) for task in waiting_ids)
+    restored = 0
+    for task in waiting_tasks:
+        if queue_instance.enqueue(task.id, priority=task.priority):
+            restored += 1
+            logger.info(
+                "Download task restored",
+                extra={
+                    "download_event": "restored",
+                    "download_task_id": task.id,
+                    "media_id": task.media_id,
+                    "priority": task.priority,
+                },
+            )
+    return restored
 
 
 def cancel_download(db: Session, task: DownloadTask) -> DownloadTask:
@@ -95,8 +130,14 @@ def cancel_download(db: Session, task: DownloadTask) -> DownloadTask:
         task.status = DownloadStatus.CANCELLED
         task.speed_bytes_per_second = None
         task.remaining_seconds = None
+        db.flush()
+        update_media_download_status(db, task.media_id)
         db.commit()
         db.refresh(task)
+        logger.info(
+            "Download task cancelled",
+            extra=download_log_context(task, event="cancelled"),
+        )
     elif task.status != DownloadStatus.CANCELLED:
         raise ConflictError(
             "当前状态的下载任务不能取消",
@@ -117,8 +158,13 @@ def pause_download(db: Session, task: DownloadTask) -> DownloadTask:
     task.status = DownloadStatus.PAUSED
     task.speed_bytes_per_second = None
     task.remaining_seconds = None
+    update_media_download_status(db, task.media_id)
     db.commit()
     db.refresh(task)
+    logger.info(
+        "Download task paused",
+        extra=download_log_context(task, event="paused"),
+    )
     return task
 
 
@@ -141,8 +187,13 @@ def resume_download(db: Session, task: DownloadTask) -> DownloadTask:
         task.status = DownloadStatus.WAITING
         queue_instance.enqueue(task.id, priority=task.priority)
     task.error_message = None
+    update_media_download_status(db, task.media_id)
     db.commit()
     db.refresh(task)
+    logger.info(
+        "Download task resumed",
+        extra=download_log_context(task, event="resumed"),
+    )
     return task
 
 
@@ -156,9 +207,14 @@ def retry_download(db: Session, task: DownloadTask) -> DownloadTask:
     reset_download_metrics(task)
     task.status = DownloadStatus.WAITING
     task.error_message = None
+    update_media_download_status(db, task.media_id)
     db.commit()
     get_download_queue().enqueue(task.id, priority=task.priority)
     db.refresh(task)
+    logger.info(
+        "Download task retry queued",
+        extra=download_log_context(task, event="retry_queued"),
+    )
     return task
 
 
@@ -230,11 +286,59 @@ def register_local_resource(
     return resource
 
 
+def download_log_context(
+    task: DownloadTask,
+    *,
+    event: str,
+    **values,
+) -> dict[str, object]:
+    return {
+        "download_event": event,
+        "download_task_id": task.id,
+        "media_id": task.media_id,
+        "status": task.status.value,
+        "priority": task.priority,
+        **values,
+    }
+
+
+def update_media_download_status(db: Session, media_id: int | None) -> None:
+    if media_id is None:
+        return
+    media = db.get(Media, media_id)
+    if media is None:
+        return
+    local_resource_id = db.scalar(
+        select(LocalResource.id).where(LocalResource.media_id == media_id).limit(1)
+    )
+    if local_resource_id is not None:
+        media.status = MediaStatus.AVAILABLE
+        return
+    active_download_id = db.scalar(
+        select(DownloadTask.id)
+        .where(
+            DownloadTask.media_id == media_id,
+            DownloadTask.status.in_(
+                [
+                    DownloadStatus.WAITING,
+                    DownloadStatus.DOWNLOADING,
+                    DownloadStatus.PAUSED,
+                ]
+            ),
+        )
+        .limit(1)
+    )
+    media.status = (
+        MediaStatus.DOWNLOADING if active_download_id is not None else MediaStatus.PENDING
+    )
+
+
 def _run_download(
     task_id: int,
     cancellation_token: DownloadCancellationToken,
     downloader: Downloader = _default_downloader,
 ) -> None:
+    started_at = time.perf_counter()
     try:
         with SessionLocal() as db:
             task = db.get(DownloadTask, task_id)
@@ -251,7 +355,16 @@ def _run_download(
                 return
             task.status = DownloadStatus.DOWNLOADING
             task.error_message = None
+            update_media_download_status(db, task.media_id)
             db.commit()
+            logger.info(
+                "Download task started",
+                extra=download_log_context(
+                    task,
+                    event="started",
+                    downloader=downloader.name,
+                ),
+            )
 
             target_directory, _ = resolve_download_directory(task.target_directory)
             target = target_directory / safe_target_name(task.target_name)
@@ -264,7 +377,10 @@ def _run_download(
                 expected_sha256=task.expected_sha256,
             )
 
+            last_logged_bucket = -1
+
             def update_progress(progress: DownloadProgress) -> None:
+                nonlocal last_logged_bucket
                 task.downloaded_bytes = progress.downloaded_bytes
                 if progress.total_bytes is not None:
                     task.total_bytes = progress.total_bytes
@@ -277,6 +393,22 @@ def _run_download(
                     )
                 task.remaining_seconds = progress.remaining_seconds
                 db.commit()
+                if progress.percentage is not None:
+                    bucket = int(progress.percentage // 10)
+                    if bucket > last_logged_bucket:
+                        last_logged_bucket = bucket
+                        logger.info(
+                            "Download task progress updated",
+                            extra=download_log_context(
+                                task,
+                                event="progress",
+                                progress=task.progress,
+                                downloaded_bytes=task.downloaded_bytes,
+                                total_bytes=task.total_bytes,
+                                speed_bytes_per_second=task.speed_bytes_per_second,
+                                remaining_seconds=task.remaining_seconds,
+                            ),
+                        )
 
             result = downloader.download(
                 request,
@@ -294,7 +426,19 @@ def _run_download(
             task.checksum_sha256 = result.checksum
             task.status = DownloadStatus.COMPLETED
             register_local_resource(db, task=task, result=result)
+            db.flush()
+            update_media_download_status(db, task.media_id)
             db.commit()
+            logger.info(
+                "Download task completed",
+                extra=download_log_context(
+                    task,
+                    event="completed",
+                    file_size=result.file_size,
+                    checksum_sha256=result.checksum,
+                    duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
+                ),
+            )
     except DownloadCancelledError:
         with SessionLocal() as db:
             task = db.get(DownloadTask, task_id)
@@ -303,7 +447,13 @@ def _run_download(
                     task.status = DownloadStatus.CANCELLED
                 task.speed_bytes_per_second = None
                 task.remaining_seconds = None
+                db.flush()
+                update_media_download_status(db, task.media_id)
                 db.commit()
+                logger.info(
+                    "Download task cancelled during execution",
+                    extra=download_log_context(task, event="cancelled"),
+                )
     except Exception as exc:
         with SessionLocal() as db:
             task = db.get(DownloadTask, task_id)
@@ -315,6 +465,20 @@ def _run_download(
                 task.speed_bytes_per_second = None
                 task.remaining_seconds = None
                 task.error_message = str(exc)
+                db.flush()
+                update_media_download_status(db, task.media_id)
                 db.commit()
                 target_directory, _ = resolve_download_directory(task.target_directory)
                 cleanup_download_temp_file(target_directory / safe_target_name(task.target_name))
+                logger.exception(
+                    "Download task failed",
+                    extra=download_log_context(
+                        task,
+                        event="failed",
+                        error_type=type(exc).__name__,
+                        duration_ms=round(
+                            (time.perf_counter() - started_at) * 1000,
+                            2,
+                        ),
+                    ),
+                )

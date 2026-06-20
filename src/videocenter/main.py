@@ -21,8 +21,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(_: FastAPI):
     settings.media_root.mkdir(parents=True, exist_ok=True)
     restored_downloads = restore_download_queue()
-    if restored_downloads:
-        logger.info("Restored %s waiting download tasks", restored_downloads)
+    logger.info(
+        "Download queue recovery completed",
+        extra={
+            "download_event": "recovery_completed",
+            "restored_download_count": restored_downloads,
+        },
+    )
     logger.info("Application started")
     yield
     logger.info("Application stopped")

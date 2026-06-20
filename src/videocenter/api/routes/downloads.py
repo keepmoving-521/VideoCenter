@@ -19,6 +19,7 @@ from videocenter.services.downloads import (
     retry_download,
     safe_target_name,
     start_download,
+    update_media_download_status,
 )
 
 router = APIRouter()
@@ -79,6 +80,8 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
         priority=payload.priority,
     )
     db.add(task)
+    db.flush()
+    update_media_download_status(db, task.media_id)
     db.commit()
     db.refresh(task)
     start_download(task.id, priority=task.priority)
