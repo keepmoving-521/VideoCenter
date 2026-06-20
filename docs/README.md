@@ -33,5 +33,6 @@
 - [R20～R21：解析任务日志与结果缓存](parser-task-logging-and-cache.md)
 - [R22～R23：防止重复解析与解析器单元测试](duplicate-parsing-and-parser-tests.md)
 - [L01：影视资源分页查询](media-pagination.md)
+- [L02～L08：影视搜索、筛选、排序和详情](media-search-filter-sort-detail.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

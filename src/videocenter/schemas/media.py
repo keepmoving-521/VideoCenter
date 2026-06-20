@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from enum import StrEnum
 from typing import Annotated
 
 from pydantic import (
@@ -13,7 +14,7 @@ from pydantic import (
 )
 
 from videocenter.models.media import MediaStatus, MediaType
-from videocenter.schemas.catalog import TagRead
+from videocenter.schemas.catalog import SeasonWithEpisodesRead, TagRead
 from videocenter.schemas.common import ApiRequestModel, PositiveId, ShortText
 
 OptionalShortText = Annotated[
@@ -24,6 +25,20 @@ ContentRating = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=32),
 ]
+
+
+class MediaSortField(StrEnum):
+    CREATED_AT = "created_at"
+    UPDATED_AT = "updated_at"
+    TITLE = "title"
+    RELEASE_YEAR = "release_year"
+    RATING = "rating"
+    PERSONAL_RATING = "personal_rating"
+
+
+class SortOrder(StrEnum):
+    ASC = "asc"
+    DESC = "desc"
 
 
 def normalize_string_list(
@@ -307,6 +322,10 @@ class MediaPage(BaseModel):
     total_pages: int
     has_next: bool
     has_previous: bool
+
+
+class MediaDetailRead(MediaRead):
+    seasons: list[SeasonWithEpisodesRead] = Field(default_factory=list)
 
 
 class LocalScanRequest(ApiRequestModel):

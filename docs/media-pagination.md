@@ -17,6 +17,9 @@ GET /api/v1/media?page=1&page_size=50
 | `query` | 空 | 1～100 字符 | 标题搜索 |
 | `is_favorite` | 空 | 布尔值 | 收藏状态筛选 |
 
+更多标题搜索、类型、年份、状态、来源筛选和排序参数参见
+[L02-L08 影视搜索筛选排序与详情](media-search-filter-sort-detail.md)。
+
 ## 响应结构
 
 ```json

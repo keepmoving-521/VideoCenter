@@ -242,6 +242,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 影视资源列表的分页参数和响应结构请参阅
 [影视资源分页查询文档](docs/media-pagination.md)。
 
+影视标题搜索、组合筛选、排序和完整详情查询请参阅
+[影视搜索筛选排序与详情文档](docs/media-search-filter-sort-detail.md)。
+
 ## 项目结构
 
 ```text
