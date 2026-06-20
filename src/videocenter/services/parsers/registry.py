@@ -3,7 +3,9 @@ import logging
 import time
 import urllib.error
 from collections.abc import Iterable
+from dataclasses import dataclass
 from hashlib import sha256
+from threading import Lock
 from uuid import uuid4
 
 from videocenter.services.parsers.base import ParseRequest, ParseResult, ResourceParser
@@ -15,6 +17,12 @@ from videocenter.services.parsers.errors import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class InFlightParse:
+    task: asyncio.Task[ParseResult]
+    task_id: str
 
 
 class ParserRegistry:
@@ -40,6 +48,8 @@ class ParserRegistry:
         self.retry_max_delay_seconds = retry_max_delay_seconds
         self.cache = cache if cache is not None else ParseResultCache()
         self._parsers: dict[str, ResourceParser] = {}
+        self._inflight: dict[str, InFlightParse] = {}
+        self._inflight_lock = Lock()
         for parser in parsers:
             self.register(parser)
 
@@ -130,6 +140,56 @@ class ParserRegistry:
             )
             return cached
 
+        with self._inflight_lock:
+            inflight = self._inflight.get(cache_key)
+            is_owner = inflight is None
+            if inflight is None:
+                task = asyncio.create_task(
+                    self._parse_uncached(
+                        parser,
+                        request,
+                        cache_key=cache_key,
+                        task_id=selected_task_id,
+                    )
+                )
+                inflight = InFlightParse(task=task, task_id=selected_task_id)
+                self._inflight[cache_key] = inflight
+                task.add_done_callback(
+                    lambda completed, key=cache_key, current=inflight: self._remove_inflight(
+                        key, current
+                    )
+                )
+
+        if not is_owner:
+            logger.info(
+                "Duplicate parse joined in-flight task",
+                extra={
+                    **log_context,
+                    "parse_event": "duplicate_wait",
+                    "shared_parse_task_id": inflight.task_id,
+                },
+            )
+        return await asyncio.shield(inflight.task)
+
+    def _remove_inflight(self, cache_key: str, inflight: InFlightParse) -> None:
+        with self._inflight_lock:
+            current = self._inflight.get(cache_key)
+            if current is inflight:
+                self._inflight.pop(cache_key, None)
+
+    async def _parse_uncached(
+        self,
+        parser: ResourceParser,
+        request: ParseRequest,
+        *,
+        cache_key: str,
+        task_id: str,
+    ) -> ParseResult:
+        log_context = {
+            "parse_task_id": task_id,
+            "parser": parser.name,
+            "hostname": request.hostname,
+        }
         started_at = time.perf_counter()
         logger.info(
             "Parse task started",

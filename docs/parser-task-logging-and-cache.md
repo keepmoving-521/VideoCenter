@@ -24,6 +24,7 @@
 | `retry` | 临时失败，即将重试 |
 | `completed` | 解析成功 |
 | `cache_hit` | 直接使用缓存结果 |
+| `duplicate_wait` | 等待相同页面正在执行的解析任务 |
 | `timeout` | 所有尝试均超时 |
 | `failed` | 解析失败或重试耗尽 |
 
@@ -58,5 +59,8 @@ VIDEOCENTER_PARSER_CACHE_MAX_ENTRIES=500
 - 适合当前单机私人部署。
 
 未来采用多实例部署时，可将缓存替换为 Redis，同时保持注册器调用接口不变。
+
+相同页面并发解析的任务合并机制参见
+[R22-R23 防止重复解析与解析器单元测试](duplicate-parsing-and-parser-tests.md)。
 
 本次迭代不修改数据库结构，不需要新增 Alembic 迁移。

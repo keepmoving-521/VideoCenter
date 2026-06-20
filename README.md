@@ -236,6 +236,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 解析任务追踪日志和成功结果缓存规则请参阅
 [解析任务日志与缓存文档](docs/parser-task-logging-and-cache.md)。
 
+并发重复解析合并和解析器单元测试范围请参阅
+[防止重复解析与解析器测试文档](docs/duplicate-parsing-and-parser-tests.md)。
+
 ## 项目结构
 
 ```text
