@@ -1,12 +1,7 @@
 from collections.abc import Iterable
 
 from videocenter.services.parsers.base import ParseRequest, ParseResult, ResourceParser
-
-
-class ParserNotFoundError(LookupError):
-    def __init__(self, source_url: str) -> None:
-        super().__init__(f"没有可处理该资源地址的解析器：{source_url}")
-        self.source_url = source_url
+from videocenter.services.parsers.errors import ParserNotFoundError
 
 
 class ParserRegistry:
@@ -39,6 +34,17 @@ class ParserRegistry:
             )
         )
 
+    def supported_hosts(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                {
+                    host.casefold().rstrip(".")
+                    for parser in self._parsers.values()
+                    for host in parser.supported_hosts
+                }
+            )
+        )
+
     def select(self, request: ParseRequest) -> ResourceParser:
         parsers = self.list_parsers()
         host_parsers = tuple(
@@ -50,7 +56,11 @@ class ParserRegistry:
         for parser in (*host_parsers, *generic_parsers):
             if parser.supports(request):
                 return parser
-        raise ParserNotFoundError(request.source_url)
+        raise ParserNotFoundError(
+            request.source_url,
+            request.hostname,
+            self.supported_hosts(),
+        )
 
     def select_url(
         self,

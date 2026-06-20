@@ -13,6 +13,7 @@ from videocenter.services.parsers import (
     ParserNotFoundError,
     ParserRegistry,
     ResourceParser,
+    UnsupportedWebsiteError,
 )
 
 
@@ -252,6 +253,25 @@ def test_registry_reports_when_no_parser_supports_url():
         registry.select(request)
 
     assert exc_info.value.source_url == request.source_url
+    assert isinstance(exc_info.value, UnsupportedWebsiteError)
+    assert exc_info.value.code == "UNSUPPORTED_WEBSITE"
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.hostname == "unsupported.test"
+    assert exc_info.value.supported_hosts == ("example.com",)
+    assert exc_info.value.details == {
+        "hostname": "unsupported.test",
+        "supported_hosts": ["example.com"],
+    }
+
+
+def test_supported_hosts_are_normalized_deduplicated_and_sorted():
+    class MultipleHostsParser(ExampleParser):
+        name = "multiple-hosts"
+        supported_hosts = ("Video.Test.", "example.com")
+
+    registry = ParserRegistry([ExampleParser(), MultipleHostsParser()])
+
+    assert registry.supported_hosts() == ("example.com", "video.test")
 
 
 def test_resource_parser_cannot_be_instantiated_without_contract_methods():

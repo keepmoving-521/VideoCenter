@@ -6,6 +6,7 @@ from videocenter.api.exception_handlers import register_exception_handlers
 from videocenter.api.middleware import REQUEST_ID_HEADER, RequestContextMiddleware
 from videocenter.core.config import AppEnvironment, Settings
 from videocenter.core.exceptions import NotFoundError
+from videocenter.services.parsers import ParserRegistry, UnsupportedWebsiteError
 
 
 def create_test_app(*, debug_details: bool = False) -> FastAPI:
@@ -39,6 +40,10 @@ def create_test_app(*, debug_details: bool = False) -> FastAPI:
     def unexpected_error():
         raise RuntimeError("sensitive internal detail")
 
+    @app.get("/unsupported-website")
+    def unsupported_website():
+        ParserRegistry().select_url("https://unsupported.example/movie/1?token=secret")
+
     return app
 
 
@@ -55,6 +60,34 @@ def test_business_exception_uses_stable_error_code():
     }
     assert payload["meta"]["path"] == "/business-error"
     assert payload["meta"]["request_id"] == response.headers[REQUEST_ID_HEADER]
+
+
+def test_unsupported_website_uses_safe_standard_error_response():
+    with TestClient(create_test_app()) as client:
+        response = client.get("/unsupported-website")
+
+    assert response.status_code == 400
+    payload = response.json()["error"]
+    assert payload == {
+        "code": "UNSUPPORTED_WEBSITE",
+        "message": "暂不支持网站：unsupported.example",
+        "details": {
+            "hostname": "unsupported.example",
+            "supported_hosts": [],
+        },
+    }
+    assert "token" not in response.text
+
+
+def test_unsupported_website_error_is_an_application_exception():
+    error = UnsupportedWebsiteError(
+        "https://unsupported.example/movie/1",
+        "unsupported.example",
+        ("example.com",),
+    )
+
+    assert error.status_code == 400
+    assert error.code == "UNSUPPORTED_WEBSITE"
 
 
 def test_http_exception_is_normalized():

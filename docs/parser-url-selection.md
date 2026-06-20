@@ -28,7 +28,8 @@ class ExampleParser(ResourceParser):
 1. 找出声明域名且与 URL 域名匹配的解析器。
 2. 按 `priority` 从高到低调用其 `supports()`。
 3. 如果没有域名解析器可用，再尝试未声明域名的通用解析器。
-4. 没有任何解析器支持时抛出 `ParserNotFoundError`。
+4. 没有任何解析器支持时抛出错误码为 `UNSUPPORTED_WEBSITE` 的
+   `UnsupportedWebsiteError`；旧名称 `ParserNotFoundError` 继续兼容。
 
 域名解析器优先于通用解析器，即使通用解析器的数值优先级更高，避免宽泛规则抢占专用站点解析器。
 

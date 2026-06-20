@@ -8,7 +8,11 @@ from videocenter.services.parsers.base import (
     ParseResult,
     ResourceParser,
 )
-from videocenter.services.parsers.registry import ParserNotFoundError, ParserRegistry
+from videocenter.services.parsers.errors import (
+    ParserNotFoundError,
+    UnsupportedWebsiteError,
+)
+from videocenter.services.parsers.registry import ParserRegistry
 
 __all__ = [
     "ParsedDownload",
@@ -21,4 +25,5 @@ __all__ = [
     "ParserNotFoundError",
     "ParserRegistry",
     "ResourceParser",
+    "UnsupportedWebsiteError",
 ]

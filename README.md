@@ -215,6 +215,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 根据资源页面域名自动路由解析器的规则请参阅
 [解析器 URL 选择文档](docs/parser-url-selection.md)。
 
+不支持网站的错误代码、响应内容和安全规则请参阅
+[不支持网站错误处理文档](docs/unsupported-website-error.md)。
+
 ## 项目结构
 
 ```text
