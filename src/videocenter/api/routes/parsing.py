@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
@@ -42,12 +44,15 @@ async def preview_resource_page(
     registry: ParserRegistry = Depends(get_parser_registry),
     store: ParseWorkflowStore = Depends(get_parse_workflow_store),
 ):
+    parse_task_id = uuid4().hex
     result = await registry.parse_url(
         str(payload.source_url),
         preferred_language=payload.preferred_language,
+        task_id=parse_task_id,
     )
     preview_id, expires_at = store.create_preview(result)
     return ParsePreviewResponse(
+        parse_task_id=parse_task_id,
         preview_id=preview_id,
         expires_at=expires_at,
         result=result,

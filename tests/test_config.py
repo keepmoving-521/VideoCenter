@@ -69,6 +69,9 @@ def test_parser_retry_settings_are_configurable():
         parser_max_attempts=4,
         parser_retry_delay_seconds=0.25,
         parser_retry_max_delay_seconds=2,
+        parser_cache_enabled=False,
+        parser_cache_ttl_seconds=120,
+        parser_cache_max_entries=25,
         _env_file=None,
     )
 
@@ -76,6 +79,9 @@ def test_parser_retry_settings_are_configurable():
     assert settings.parser_max_attempts == 4
     assert settings.parser_retry_delay_seconds == 0.25
     assert settings.parser_retry_max_delay_seconds == 2
+    assert settings.parser_cache_enabled is False
+    assert settings.parser_cache_ttl_seconds == 120
+    assert settings.parser_cache_max_entries == 25
 
 
 @pytest.mark.parametrize(
@@ -87,6 +93,8 @@ def test_parser_retry_settings_are_configurable():
             "parser_retry_delay_seconds": 2,
             "parser_retry_max_delay_seconds": 1,
         },
+        {"parser_cache_ttl_seconds": 0},
+        {"parser_cache_max_entries": 0},
     ],
 )
 def test_invalid_parser_retry_settings_are_rejected(values):

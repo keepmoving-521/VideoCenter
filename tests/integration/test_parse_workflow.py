@@ -92,6 +92,7 @@ def test_preview_confirm_and_save_parse_result(
         200,
     )
     assert preview["result"]["title"] == "Parsed Series"
+    assert len(preview["parse_task_id"]) == 32
     assert len(preview["preview_id"]) == 32
 
     edited = preview["result"]

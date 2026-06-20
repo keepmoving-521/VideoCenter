@@ -1,13 +1,20 @@
 import asyncio
+import logging
+import time
 import urllib.error
 from collections.abc import Iterable
+from hashlib import sha256
+from uuid import uuid4
 
 from videocenter.services.parsers.base import ParseRequest, ParseResult, ResourceParser
+from videocenter.services.parsers.cache import ParseResultCache
 from videocenter.services.parsers.errors import (
     ParseFailedError,
     ParserNotFoundError,
     ParseTimeoutError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ParserRegistry:
@@ -19,6 +26,7 @@ class ParserRegistry:
         max_attempts: int = 3,
         retry_delay_seconds: float = 0.5,
         retry_max_delay_seconds: float = 5,
+        cache: ParseResultCache | None = None,
     ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("解析超时时间必须大于零")
@@ -30,6 +38,7 @@ class ParserRegistry:
         self.max_attempts = max_attempts
         self.retry_delay_seconds = retry_delay_seconds
         self.retry_max_delay_seconds = retry_max_delay_seconds
+        self.cache = cache if cache is not None else ParseResultCache()
         self._parsers: dict[str, ResourceParser] = {}
         for parser in parsers:
             self.register(parser)
@@ -99,41 +108,147 @@ class ParserRegistry:
             )
         )
 
-    async def parse(self, request: ParseRequest) -> ParseResult:
+    async def parse(
+        self,
+        request: ParseRequest,
+        *,
+        task_id: str | None = None,
+    ) -> ParseResult:
         parser = self.select(request)
+        selected_task_id = task_id or uuid4().hex
+        cache_key = self._cache_key(parser, request)
+        log_context = {
+            "parse_task_id": selected_task_id,
+            "parser": parser.name,
+            "hostname": request.hostname,
+        }
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            logger.info(
+                "Parse cache hit",
+                extra={**log_context, "parse_event": "cache_hit"},
+            )
+            return cached
+
+        started_at = time.perf_counter()
+        logger.info(
+            "Parse task started",
+            extra={
+                **log_context,
+                "parse_event": "started",
+                "max_attempts": self.max_attempts,
+                "timeout_seconds": self.timeout_seconds,
+            },
+        )
         last_error: Exception | None = None
         timed_out = False
         for attempt in range(1, self.max_attempts + 1):
+            attempt_started_at = time.perf_counter()
+            logger.info(
+                "Parse attempt started",
+                extra={
+                    **log_context,
+                    "parse_event": "attempt_started",
+                    "attempt": attempt,
+                },
+            )
             try:
                 async with asyncio.timeout(self.timeout_seconds):
                     result = await parser.parse(request)
                 if not isinstance(result, ParseResult):
                     raise TypeError(f"解析器 {parser.name} 返回了无效的解析结果")
+                self.cache.set(cache_key, result)
+                logger.info(
+                    "Parse task completed",
+                    extra={
+                        **log_context,
+                        "parse_event": "completed",
+                        "attempt": attempt,
+                        "duration_ms": round(
+                            (time.perf_counter() - started_at) * 1000,
+                            2,
+                        ),
+                    },
+                )
                 return result
             except TimeoutError as exc:
                 last_error = exc
                 timed_out = True
+                error_name = "TimeoutError"
             except Exception as exc:
                 if not self._is_retryable(exc):
+                    logger.exception(
+                        "Parse task failed without retry",
+                        extra={
+                            **log_context,
+                            "parse_event": "failed",
+                            "attempt": attempt,
+                            "error_type": type(exc).__name__,
+                            "duration_ms": round(
+                                (time.perf_counter() - started_at) * 1000,
+                                2,
+                            ),
+                        },
+                    )
                     raise
                 last_error = exc
                 timed_out = False
+                error_name = type(exc).__name__
 
             if attempt < self.max_attempts:
                 delay = min(
                     self.retry_delay_seconds * (2 ** (attempt - 1)),
                     self.retry_max_delay_seconds,
                 )
+                logger.warning(
+                    "Parse attempt will retry",
+                    extra={
+                        **log_context,
+                        "parse_event": "retry",
+                        "attempt": attempt,
+                        "error_type": error_name,
+                        "attempt_duration_ms": round(
+                            (time.perf_counter() - attempt_started_at) * 1000,
+                            2,
+                        ),
+                        "retry_delay_seconds": delay,
+                    },
+                )
                 if delay:
                     await asyncio.sleep(delay)
 
         if timed_out:
+            logger.error(
+                "Parse task timed out",
+                extra={
+                    **log_context,
+                    "parse_event": "timeout",
+                    "attempts": self.max_attempts,
+                    "duration_ms": round(
+                        (time.perf_counter() - started_at) * 1000,
+                        2,
+                    ),
+                },
+            )
             raise ParseTimeoutError(
                 parser_name=parser.name,
                 hostname=request.hostname,
                 attempts=self.max_attempts,
                 timeout_seconds=self.timeout_seconds,
             ) from last_error
+        logger.error(
+            "Parse task exhausted retries",
+            extra={
+                **log_context,
+                "parse_event": "failed",
+                "attempts": self.max_attempts,
+                "error_type": type(last_error).__name__ if last_error else "UnknownError",
+                "duration_ms": round(
+                    (time.perf_counter() - started_at) * 1000,
+                    2,
+                ),
+            },
+        )
         raise ParseFailedError(
             parser_name=parser.name,
             hostname=request.hostname,
@@ -158,10 +273,17 @@ class ParserRegistry:
         source_url: str,
         *,
         preferred_language: str | None = None,
+        task_id: str | None = None,
     ) -> ParseResult:
         return await self.parse(
             ParseRequest(
                 source_url,
                 preferred_language=preferred_language,
-            )
+            ),
+            task_id=task_id,
         )
+
+    @staticmethod
+    def _cache_key(parser: ResourceParser, request: ParseRequest) -> str:
+        raw_key = f"{parser.name}\0{request.source_url}\0{request.preferred_language or ''}"
+        return sha256(raw_key.encode()).hexdigest()

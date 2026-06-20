@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     parser_max_attempts: int = 3
     parser_retry_delay_seconds: float = 0.5
     parser_retry_max_delay_seconds: float = 5
+    parser_cache_enabled: bool = True
+    parser_cache_ttl_seconds: float = 1800
+    parser_cache_max_entries: int = 500
     api_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
@@ -83,6 +86,7 @@ class Settings(BaseSettings):
         "parser_timeout_seconds",
         "parser_retry_delay_seconds",
         "parser_retry_max_delay_seconds",
+        "parser_cache_ttl_seconds",
     )
     @classmethod
     def validate_parser_time_values(cls, value: float) -> float:
@@ -97,10 +101,19 @@ class Settings(BaseSettings):
             raise ValueError("Parser max attempts must be between 1 and 10")
         return value
 
+    @field_validator("parser_cache_max_entries")
+    @classmethod
+    def validate_parser_cache_max_entries(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("Parser cache max entries must be greater than zero")
+        return value
+
     @model_validator(mode="after")
     def validate_parser_timeout(self) -> "Settings":
         if self.parser_timeout_seconds <= 0:
             raise ValueError("Parser timeout must be greater than zero")
+        if self.parser_cache_ttl_seconds <= 0:
+            raise ValueError("Parser cache TTL must be greater than zero")
         if self.parser_retry_max_delay_seconds < self.parser_retry_delay_seconds:
             raise ValueError("Parser retry max delay cannot be less than retry delay")
         return self

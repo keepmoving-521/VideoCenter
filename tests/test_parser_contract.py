@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import time
 import urllib.error
 
 import pytest
@@ -12,6 +14,7 @@ from videocenter.services.parsers import (
     ParseFailedError,
     ParseRequest,
     ParseResult,
+    ParseResultCache,
     ParserNotFoundError,
     ParserRegistry,
     ParseTimeoutError,
@@ -422,3 +425,121 @@ def test_registry_does_not_retry_non_transient_parser_errors():
         asyncio.run(registry.parse_url("https://example.com/movie/1"))
 
     assert parser.calls == 1
+
+
+def test_registry_caches_successful_result_by_url_and_language():
+    class CountingParser(ExampleParser):
+        name = "counting"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def parse(self, request: ParseRequest) -> ParseResult:
+            self.calls += 1
+            return await super().parse(request)
+
+    parser = CountingParser()
+    registry = ParserRegistry(
+        [parser],
+        cache=ParseResultCache(ttl_seconds=60, max_entries=10),
+    )
+
+    first = asyncio.run(
+        registry.parse_url(
+            "https://example.com/series/1",
+            preferred_language="zh-CN",
+        )
+    )
+    second = asyncio.run(
+        registry.parse_url(
+            "https://example.com/series/1",
+            preferred_language="zh-CN",
+        )
+    )
+    asyncio.run(
+        registry.parse_url(
+            "https://example.com/series/1",
+            preferred_language="en",
+        )
+    )
+
+    assert first is second
+    assert parser.calls == 2
+    assert len(registry.cache) == 2
+
+
+def test_registry_does_not_cache_failures():
+    class RecoveringParser(ExampleParser):
+        name = "recovering"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def parse(self, request: ParseRequest) -> ParseResult:
+            self.calls += 1
+            if self.calls == 1:
+                raise ValueError("invalid page")
+            return await super().parse(request)
+
+    parser = RecoveringParser()
+    registry = ParserRegistry([parser], max_attempts=1)
+
+    with pytest.raises(ValueError):
+        asyncio.run(registry.parse_url("https://example.com/series/1"))
+    result = asyncio.run(registry.parse_url("https://example.com/series/1"))
+
+    assert result.title == "Example Series"
+    assert parser.calls == 2
+
+
+def test_parse_result_cache_expires_and_evicts_oldest_entry():
+    cache = ParseResultCache(ttl_seconds=0.01, max_entries=1)
+    first = ParseResult(
+        title="First",
+        source_site="Example",
+        source_page_url="https://example.com/first",
+    )
+    second = ParseResult(
+        title="Second",
+        source_site="Example",
+        source_page_url="https://example.com/second",
+    )
+
+    cache.set("first", first)
+    cache.set("second", second)
+    assert cache.get("first") is None
+    assert cache.get("second") == second
+    time.sleep(0.02)
+    assert cache.get("second") is None
+
+
+def test_registry_writes_structured_task_and_cache_logs(caplog):
+    registry = ParserRegistry([ExampleParser()])
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="videocenter.services.parsers.registry",
+    ):
+        asyncio.run(
+            registry.parse_url(
+                "https://example.com/series/1",
+                task_id="parse-task-123",
+            )
+        )
+        asyncio.run(
+            registry.parse_url(
+                "https://example.com/series/1",
+                task_id="parse-task-456",
+            )
+        )
+
+    events = [record.parse_event for record in caplog.records if hasattr(record, "parse_event")]
+    assert events == [
+        "started",
+        "attempt_started",
+        "completed",
+        "cache_hit",
+    ]
+    assert caplog.records[0].parse_task_id == "parse-task-123"
+    assert caplog.records[-1].parse_task_id == "parse-task-456"
+    assert all(getattr(record, "hostname", None) == "example.com" for record in caplog.records)

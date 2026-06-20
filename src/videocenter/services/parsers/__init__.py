@@ -8,6 +8,7 @@ from videocenter.services.parsers.base import (
     ParseResult,
     ResourceParser,
 )
+from videocenter.services.parsers.cache import ParseResultCache
 from videocenter.services.parsers.defaults import create_default_parser_registry
 from videocenter.services.parsers.errors import (
     ParseFailedError,
@@ -30,6 +31,7 @@ __all__ = [
     "ParsedSeason",
     "ParseRequest",
     "ParseResult",
+    "ParseResultCache",
     "ParseFailedError",
     "ParseTimeoutError",
     "ParserNotFoundError",

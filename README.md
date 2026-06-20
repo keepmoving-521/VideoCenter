@@ -233,6 +233,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 解析超时、指数退避和临时失败重试规则请参阅
 [解析超时与重试文档](docs/parser-timeout-and-retry.md)。
 
+解析任务追踪日志和成功结果缓存规则请参阅
+[解析任务日志与缓存文档](docs/parser-task-logging-and-cache.md)。
+
 ## 项目结构
 
 ```text
