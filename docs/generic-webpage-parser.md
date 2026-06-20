@@ -51,3 +51,6 @@ result = await registry.parse_url("https://example.com/movie/1")
 
 标题、简介、海报、上映年份以及演职员的详细候选字段和优先级参见
 [R06-R10 网页影片核心信息解析](webpage-core-metadata-parsing.md)。
+
+视频下载地址、多清晰度、字幕以及电视剧季集结构参见
+[R11-R14 网页媒体资源与季集解析](webpage-media-resources-and-series.md)。

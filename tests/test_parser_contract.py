@@ -222,6 +222,21 @@ def test_parsed_hierarchy_rejects_invalid_or_duplicate_numbers():
                 ParsedSeason(season_number=1),
             ),
         )
+    with pytest.raises(ValueError, match="分集总数"):
+        ParsedSeason(
+            season_number=1,
+            episode_count=0,
+            episodes=(ParsedEpisode(episode_number=1, title="One"),),
+        )
+    with pytest.raises(ValueError, match="季总数"):
+        ParseResult(
+            title="Series",
+            source_site="Example",
+            source_page_url="https://example.com/series/1",
+            media_type="series",
+            season_count=0,
+            seasons=(ParsedSeason(season_number=1),),
+        )
 
 
 def test_only_series_results_can_contain_seasons():

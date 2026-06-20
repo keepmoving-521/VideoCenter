@@ -136,6 +136,7 @@ class ParsedEpisode(ParserDataModel):
 
 class ParsedSeason(ParserDataModel):
     season_number: int = Field(ge=0, le=10_000)
+    episode_count: int | None = Field(default=None, ge=0, le=100_000)
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=10_000)
     poster_url: str | None = None
@@ -159,6 +160,8 @@ class ParsedSeason(ParserDataModel):
         numbers = [episode.episode_number for episode in self.episodes]
         if len(numbers) != len(set(numbers)):
             raise ValueError("同一季的分集编号不能重复")
+        if self.episode_count is not None and self.episode_count < len(self.episodes):
+            raise ValueError("分集总数不能小于已解析的分集数量")
         return self
 
 
@@ -184,6 +187,7 @@ class ParseResult(ParserDataModel):
     background_url: str | None = None
     tags: tuple[str, ...] = ()
     downloads: tuple[ParsedDownload, ...] = ()
+    season_count: int | None = Field(default=None, ge=0, le=10_000)
     seasons: tuple[ParsedSeason, ...] = ()
     extra: dict[str, Any] = Field(default_factory=dict)
 
@@ -228,11 +232,13 @@ class ParseResult(ParserDataModel):
             raise ValueError("同一影片的季编号不能重复")
         if self.seasons and self.media_type != ParsedMediaType.SERIES:
             raise ValueError("只有电视剧类型的解析结果可以包含季")
+        if self.season_count is not None and self.season_count < len(self.seasons):
+            raise ValueError("季总数不能小于已解析的季数量")
         return self
 
     def to_media_values(self) -> dict[str, Any]:
         """Return fields that can be passed to the Media model."""
-        excluded = {"downloads", "seasons", "tags", "extra"}
+        excluded = {"downloads", "season_count", "seasons", "tags", "extra"}
         return self.model_dump(mode="json", exclude=excluded)
 
 

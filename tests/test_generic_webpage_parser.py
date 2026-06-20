@@ -5,6 +5,7 @@ import pytest
 from videocenter.services.parsers import (
     GenericWebPageParser,
     ParsedMediaType,
+    ParsedResourceType,
     ParseRequest,
     WebPageResponse,
     create_default_parser_registry,
@@ -201,3 +202,155 @@ def test_default_registry_contains_generic_webpage_fallback():
     parser = registry.select_url("https://unknown.example/movie/1")
 
     assert parser.name == "generic-webpage"
+
+
+def test_parser_extracts_video_qualities_and_subtitles_from_html():
+    html = """
+    <html>
+      <head><title>HTML5 Movie</title></head>
+      <body>
+        <video src="/video/default.mp4" height="720" type="video/mp4">
+          <source src="/video/movie-1080.mp4" label="1080p" type="video/mp4">
+          <source src="/video/movie-4k.m3u8" data-quality="4K"
+                  type="application/vnd.apple.mpegurl">
+          <track kind="subtitles" src="/subtitles/zh.vtt"
+                 srclang="zh-CN" label="中文">
+          <track kind="captions" src="/subtitles/en.vtt"
+                 srclang="en" label="English">
+        </video>
+      </body>
+    </html>
+    """
+
+    async def fetcher(url: str) -> WebPageResponse:
+        return response(html, url=url)
+
+    result = asyncio.run(
+        GenericWebPageParser(fetcher).parse(ParseRequest("https://media.test/movie/1"))
+    )
+
+    videos = [item for item in result.downloads if item.resource_type == ParsedResourceType.VIDEO]
+    subtitles = [
+        item for item in result.downloads if item.resource_type == ParsedResourceType.SUBTITLE
+    ]
+    assert [item.quality for item in videos] == ["720p", "1080p", "4K"]
+    assert [item.source_url for item in videos] == [
+        "https://media.test/video/default.mp4",
+        "https://media.test/video/movie-1080.mp4",
+        "https://media.test/video/movie-4k.m3u8",
+    ]
+    assert [(item.language, item.quality) for item in subtitles] == [
+        ("zh-CN", "中文"),
+        ("en", "English"),
+    ]
+
+
+def test_parser_extracts_json_ld_series_seasons_episodes_and_downloads():
+    html = """
+    <html>
+      <head>
+        <script type="application/ld+json">
+        {
+          "@type": "TVSeries",
+          "name": "Example Series",
+          "numberOfSeasons": 2,
+          "containsSeason": [
+            {
+              "@type": "TVSeason",
+              "seasonNumber": 1,
+              "name": "Season One",
+              "numberOfEpisodes": 2,
+              "episode": [
+                {
+                  "@type": "TVEpisode",
+                  "episodeNumber": 1,
+                  "name": "Pilot",
+                  "duration": "PT45M",
+                  "video": [
+                    {
+                      "@type": "VideoObject",
+                      "contentUrl": "/series/s1e1-720.mp4",
+                      "height": 720,
+                      "encodingFormat": "video/mp4"
+                    },
+                    {
+                      "@type": "VideoObject",
+                      "contentUrl": "/series/s1e1-1080.mp4",
+                      "videoQuality": "1080p",
+                      "encodingFormat": "video/mp4"
+                    }
+                  ],
+                  "subtitle": {
+                    "@type": "Subtitle",
+                    "contentUrl": "/series/s1e1-zh.vtt",
+                    "inLanguage": "zh-CN",
+                    "encodingFormat": "text/vtt"
+                  }
+                },
+                {
+                  "@type": "TVEpisode",
+                  "episodeNumber": 2,
+                  "name": "Second Episode",
+                  "contentUrl": "/series/s1e2.mp4"
+                }
+              ]
+            }
+          ]
+        }
+        </script>
+      </head>
+    </html>
+    """
+
+    async def fetcher(url: str) -> WebPageResponse:
+        return response(html, url=url)
+
+    result = asyncio.run(
+        GenericWebPageParser(fetcher).parse(ParseRequest("https://series.test/show/1"))
+    )
+
+    assert result.media_type == ParsedMediaType.SERIES
+    assert result.season_count == 2
+    assert len(result.seasons) == 1
+    season = result.seasons[0]
+    assert season.season_number == 1
+    assert season.episode_count == 2
+    assert [episode.episode_number for episode in season.episodes] == [1, 2]
+    assert [item.quality for item in season.episodes[0].downloads] == [
+        "720p",
+        "1080p",
+        None,
+    ]
+    assert season.episodes[0].downloads[-1].resource_type == ParsedResourceType.SUBTITLE
+    assert season.episodes[0].downloads[-1].language == "zh-CN"
+    assert season.episodes[1].downloads[0].source_url == ("https://series.test/series/s1e2.mp4")
+
+
+def test_parser_extracts_repeated_open_graph_video_qualities_and_meta_subtitle():
+    html = """
+    <html>
+      <head>
+        <title>Meta Video</title>
+        <meta property="og:video" content="/video/720.mp4">
+        <meta property="og:video" content="/video/1080.mp4">
+        <meta property="og:video:height" content="720">
+        <meta property="og:video:height" content="1080">
+        <meta property="og:video:type" content="video/mp4">
+        <meta property="og:video:type" content="video/mp4">
+        <meta name="video:subtitle" content="/subtitles/movie.vtt">
+      </head>
+    </html>
+    """
+
+    async def fetcher(url: str) -> WebPageResponse:
+        return response(html, url=url)
+
+    result = asyncio.run(
+        GenericWebPageParser(fetcher).parse(ParseRequest("https://meta-video.test/movie/1"))
+    )
+
+    assert [(item.quality, item.resource_type) for item in result.downloads] == [
+        ("720p", ParsedResourceType.VIDEO),
+        ("1080p", ParsedResourceType.VIDEO),
+        (None, ParsedResourceType.SUBTITLE),
+    ]

@@ -224,6 +224,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 网页标题、简介、海报、上映年份和演职员的详细解析规则请参阅
 [网页影片核心信息解析文档](docs/webpage-core-metadata-parsing.md)。
 
+视频下载地址、多清晰度、字幕和电视剧季集结构的解析规则请参阅
+[网页媒体资源与季集解析文档](docs/webpage-media-resources-and-series.md)。
+
 ## 项目结构
 
 ```text
