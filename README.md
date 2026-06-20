@@ -212,6 +212,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 解析器标准输出字段、校验和序列化规则请参阅
 [解析结果数据结构文档](docs/parser-result-structure.md)。
 
+根据资源页面域名自动路由解析器的规则请参阅
+[解析器 URL 选择文档](docs/parser-url-selection.md)。
+
 ## 项目结构
 
 ```text

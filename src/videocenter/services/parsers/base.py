@@ -2,16 +2,35 @@ from abc import ABC, abstractmethod
 from datetime import date
 from enum import StrEnum
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def validate_http_url(value: str, *, field_label: str) -> str:
-    parsed = urlparse(value)
+    parsed = urlsplit(value)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError(f"{field_label}必须是有效的 HTTP 或 HTTPS 地址")
     return value
+
+
+def normalize_http_url(value: str, *, field_label: str) -> str:
+    value = value.strip()
+    validate_http_url(value, field_label=field_label)
+    parsed = urlsplit(value)
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError(f"{field_label}不能包含用户名或密码")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(f"{field_label}端口无效") from exc
+
+    scheme = parsed.scheme.lower()
+    host = parsed.hostname.encode("idna").decode("ascii").lower()
+    display_host = f"[{host}]" if ":" in host else host
+    default_port = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+    netloc = display_host if port is None or default_port else f"{display_host}:{port}"
+    return urlunsplit((scheme, netloc, parsed.path or "/", parsed.query, ""))
 
 
 def normalize_optional_text(value: str | None) -> str | None:
@@ -70,7 +89,11 @@ class ParseRequest(ParserDataModel):
     @field_validator("source_url")
     @classmethod
     def validate_source_url(cls, value: str) -> str:
-        return validate_http_url(value, field_label="资源页面地址")
+        return normalize_http_url(value, field_label="资源页面地址")
+
+    @property
+    def hostname(self) -> str:
+        return urlsplit(self.source_url).hostname or ""
 
 
 class ParsedDownload(ParserDataModel):
@@ -213,6 +236,14 @@ class ResourceParser(ABC):
 
     name: str
     priority: int = 0
+    supported_hosts: tuple[str, ...] = ()
+
+    def matches_host(self, hostname: str) -> bool:
+        normalized_host = hostname.casefold().rstrip(".")
+        return any(
+            normalized_host == supported_host or normalized_host.endswith(f".{supported_host}")
+            for supported_host in (host.casefold().rstrip(".") for host in self.supported_hosts)
+        )
 
     @abstractmethod
     def supports(self, request: ParseRequest) -> bool:

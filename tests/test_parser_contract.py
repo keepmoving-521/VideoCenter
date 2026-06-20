@@ -19,6 +19,7 @@ from videocenter.services.parsers import (
 class ExampleParser(ResourceParser):
     name = "example"
     priority = 10
+    supported_hosts = ("example.com",)
 
     def supports(self, request: ParseRequest) -> bool:
         return "example.com" in request.source_url
@@ -55,12 +56,22 @@ class FallbackParser(ExampleParser):
     priority = 1
 
 
+class GenericParser(ExampleParser):
+    name = "generic"
+    priority = 100
+    supported_hosts = ()
+
+    def supports(self, request: ParseRequest) -> bool:
+        return request.source_url.startswith("https://")
+
+
 def test_parse_request_accepts_only_http_resource_pages():
     request = ParseRequest(
         source_url="https://example.com/movie/1",
         preferred_language="zh-CN",
     )
     assert request.preferred_language == "zh-CN"
+    assert request.hostname == "example.com"
 
     with pytest.raises(ValueError, match="HTTP"):
         ParseRequest(source_url="file:///tmp/movie.html")
@@ -68,16 +79,38 @@ def test_parse_request_accepts_only_http_resource_pages():
         ParseRequest(source_url="not-a-url")
 
 
-def test_registry_selects_highest_priority_supported_parser():
-    registry = ParserRegistry([FallbackParser(), ExampleParser()])
+def test_parse_request_normalizes_url_for_parser_selection():
+    request = ParseRequest("HTTPS://WWW.Example.COM:443/movie/1?lang=zh#player")
 
-    selected = registry.select(ParseRequest("https://example.com/movie/1"))
+    assert request.source_url == "https://www.example.com/movie/1?lang=zh"
+    assert request.hostname == "www.example.com"
+
+
+def test_registry_selects_highest_priority_supported_parser():
+    registry = ParserRegistry([GenericParser(), FallbackParser(), ExampleParser()])
+
+    selected = registry.select_url("https://www.example.com/movie/1")
 
     assert selected.name == "example"
     assert [parser.name for parser in registry.list_parsers()] == [
+        "generic",
         "example",
         "fallback",
     ]
+
+
+def test_declared_host_does_not_match_lookalike_domain():
+    registry = ParserRegistry([ExampleParser()])
+
+    with pytest.raises(ParserNotFoundError):
+        registry.select_url("https://example.com.attacker.test/movie/1")
+
+
+def test_generic_parser_is_used_only_when_no_host_parser_matches():
+    registry = ParserRegistry([GenericParser(), ExampleParser()])
+
+    assert registry.select_url("https://example.com/movie/1").name == "example"
+    assert registry.select_url("https://other.test/movie/1").name == "generic"
 
 
 def test_registry_parses_standard_nested_result():
@@ -90,6 +123,14 @@ def test_registry_parses_standard_nested_result():
     assert result.seasons[0].episodes[0].title == "Pilot"
     assert result.seasons[0].episodes[0].downloads[0].quality == "1080p"
     assert result.media_type == ParsedMediaType.SERIES
+
+    direct_result = asyncio.run(
+        registry.parse_url(
+            "https://example.com/series/1",
+            preferred_language="zh-CN",
+        )
+    )
+    assert direct_result.title == "Example Series"
 
 
 def test_parse_result_normalizes_lists_and_serializes_standard_data():
@@ -192,6 +233,15 @@ def test_registry_rejects_duplicate_names_and_supports_unregister():
 
     with pytest.raises(KeyError, match="未注册"):
         registry.unregister("missing")
+
+
+def test_registry_rejects_invalid_supported_host_configuration():
+    class InvalidHostParser(ExampleParser):
+        name = "invalid-host"
+        supported_hosts = ("https://example.com/path",)
+
+    with pytest.raises(ValueError, match="supported_hosts"):
+        ParserRegistry([InvalidHostParser()])
 
 
 def test_registry_reports_when_no_parser_supports_url():
