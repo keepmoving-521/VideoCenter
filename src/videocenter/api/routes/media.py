@@ -12,12 +12,21 @@ from videocenter.schemas.media import (
     MediaBatchDeleteResponse,
     MediaCreate,
     MediaDetailRead,
+    MediaDuplicatesResponse,
     MediaFavoriteRead,
+    MediaLibraryStats,
+    MediaMergeRequest,
+    MediaMergeResponse,
     MediaPage,
     MediaRead,
     MediaSortField,
     MediaUpdate,
     SortOrder,
+)
+from videocenter.services.media_duplicates import (
+    detect_duplicate_media,
+    get_media_library_stats,
+    merge_duplicate_media,
 )
 from videocenter.services.media_library import delete_media_records
 
@@ -116,6 +125,28 @@ def create_media(payload: MediaCreate, db: Session = Depends(get_db)):
     db.add(media)
     db.commit()
     return get_media(media.id, db)
+
+
+@router.get("/duplicates", response_model=MediaDuplicatesResponse)
+def list_duplicate_media(db: Session = Depends(get_db)):
+    return detect_duplicate_media(db)
+
+
+@router.post("/merge", response_model=MediaMergeResponse)
+def merge_media(
+    payload: MediaMergeRequest,
+    db: Session = Depends(get_db),
+):
+    return merge_duplicate_media(
+        db,
+        target_media_id=payload.target_media_id,
+        source_media_ids=payload.source_media_ids,
+    )
+
+
+@router.get("/stats", response_model=MediaLibraryStats)
+def media_library_stats(db: Session = Depends(get_db)):
+    return get_media_library_stats(db)
 
 
 @router.put(

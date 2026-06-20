@@ -36,5 +36,6 @@
 - [L02～L08：影视搜索、筛选、排序和详情](media-search-filter-sort-detail.md)
 - [L09～L11：影视信息编辑、删除与批量删除](media-edit-delete.md)
 - [L12～L13：收藏与标签管理](favorites-and-tags.md)
+- [L14～L16：重复影视检测、资源合并与影视库统计](media-duplicates-merge-stats.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

@@ -348,6 +348,66 @@ class MediaFavoriteRead(BaseModel):
     is_favorite: bool
 
 
+class DuplicateMediaItem(BaseModel):
+    id: int
+    title: str
+    media_type: MediaType
+    release_year: int | None
+    source_site: str | None
+    source_page_url: str | None
+
+
+class DuplicateMediaGroup(BaseModel):
+    reasons: list[str]
+    items: list[DuplicateMediaItem]
+
+
+class MediaDuplicatesResponse(BaseModel):
+    group_count: int
+    duplicate_media_count: int
+    groups: list[DuplicateMediaGroup]
+
+
+class MediaMergeRequest(ApiRequestModel):
+    target_media_id: PositiveId
+    source_media_ids: list[PositiveId] = Field(min_length=1, max_length=100)
+
+    @field_validator("source_media_ids")
+    @classmethod
+    def deduplicate_source_ids(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(value))
+
+    @model_validator(mode="after")
+    def reject_target_as_source(self) -> "MediaMergeRequest":
+        if self.target_media_id in self.source_media_ids:
+            raise ValueError("目标影视不能同时作为待合并影视")
+        return self
+
+
+class MediaMergeResponse(BaseModel):
+    target_media_id: int
+    merged_media_ids: list[int]
+    moved_local_resources: int
+    moved_download_tasks: int
+    merged_tags: int
+    merged_seasons: int
+    merged_episodes: int
+    merged_watch_history: bool
+
+
+class MediaLibraryStats(BaseModel):
+    total_media: int
+    favorite_media: int
+    media_with_local_resources: int
+    total_local_resources: int
+    total_download_tasks: int
+    total_tags: int
+    total_seasons: int
+    total_episodes: int
+    by_type: dict[str, int]
+    by_status: dict[str, int]
+
+
 class LocalScanRequest(ApiRequestModel):
     path: str | None = Field(default=None, min_length=1, max_length=2048)
     media_id: PositiveId | None = None
