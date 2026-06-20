@@ -27,4 +27,6 @@ STANDARD_ERROR_RESPONSES = {
     409: {"model": ErrorResponse, "description": "资源状态冲突"},
     422: {"model": ErrorResponse, "description": "请求参数校验失败"},
     500: {"model": ErrorResponse, "description": "服务器内部错误"},
+    502: {"model": ErrorResponse, "description": "上游资源页面解析失败"},
+    504: {"model": ErrorResponse, "description": "上游资源页面解析超时"},
 }

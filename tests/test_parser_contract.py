@@ -1,4 +1,5 @@
 import asyncio
+import urllib.error
 
 import pytest
 
@@ -8,10 +9,12 @@ from videocenter.services.parsers import (
     ParsedMediaType,
     ParsedResourceType,
     ParsedSeason,
+    ParseFailedError,
     ParseRequest,
     ParseResult,
     ParserNotFoundError,
     ParserRegistry,
+    ParseTimeoutError,
     ResourceParser,
     UnsupportedWebsiteError,
 )
@@ -307,3 +310,115 @@ def test_resource_parser_cannot_be_instantiated_without_contract_methods():
 
     with pytest.raises(TypeError):
         IncompleteParser()
+
+
+def test_registry_retries_transient_failure_until_success():
+    class FlakyParser(ExampleParser):
+        name = "flaky"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def parse(self, request: ParseRequest) -> ParseResult:
+            self.calls += 1
+            if self.calls < 3:
+                raise urllib.error.URLError("temporary unavailable")
+            return await super().parse(request)
+
+    parser = FlakyParser()
+    registry = ParserRegistry(
+        [parser],
+        max_attempts=3,
+        retry_delay_seconds=0,
+    )
+
+    result = asyncio.run(registry.parse_url("https://example.com/series/1"))
+
+    assert result.title == "Example Series"
+    assert parser.calls == 3
+
+
+def test_registry_reports_timeout_after_configured_attempts():
+    class SlowParser(ExampleParser):
+        name = "slow"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def parse(self, request: ParseRequest) -> ParseResult:
+            self.calls += 1
+            await asyncio.sleep(0.05)
+            return await super().parse(request)
+
+    parser = SlowParser()
+    registry = ParserRegistry(
+        [parser],
+        timeout_seconds=0.005,
+        max_attempts=2,
+        retry_delay_seconds=0,
+    )
+
+    with pytest.raises(ParseTimeoutError) as exc_info:
+        asyncio.run(registry.parse_url("https://example.com/series/1"))
+
+    assert parser.calls == 2
+    assert exc_info.value.code == "PARSE_TIMEOUT"
+    assert exc_info.value.status_code == 504
+    assert exc_info.value.details["attempts"] == 2
+
+
+def test_registry_reports_retry_exhaustion_without_exposing_url():
+    class OfflineParser(ExampleParser):
+        name = "offline"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def parse(self, request: ParseRequest) -> ParseResult:
+            self.calls += 1
+            raise urllib.error.URLError("network unavailable")
+
+    parser = OfflineParser()
+    registry = ParserRegistry(
+        [parser],
+        max_attempts=2,
+        retry_delay_seconds=0,
+    )
+
+    with pytest.raises(ParseFailedError) as exc_info:
+        asyncio.run(registry.parse_url("https://example.com/private?token=secret"))
+
+    assert parser.calls == 2
+    assert exc_info.value.code == "PARSE_FAILED"
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.details == {
+        "parser": "offline",
+        "hostname": "example.com",
+        "attempts": 2,
+        "reason": "URLError",
+    }
+    assert "secret" not in str(exc_info.value.details)
+
+
+def test_registry_does_not_retry_non_transient_parser_errors():
+    class InvalidDataParser(ExampleParser):
+        name = "invalid-data"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def parse(self, request: ParseRequest) -> ParseResult:
+            self.calls += 1
+            raise ValueError("invalid page data")
+
+    parser = InvalidDataParser()
+    registry = ParserRegistry(
+        [parser],
+        max_attempts=3,
+        retry_delay_seconds=0,
+    )
+
+    with pytest.raises(ValueError, match="invalid page data"):
+        asyncio.run(registry.parse_url("https://example.com/movie/1"))
+
+    assert parser.calls == 1

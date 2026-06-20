@@ -1,11 +1,35 @@
+import asyncio
+import urllib.error
 from collections.abc import Iterable
 
 from videocenter.services.parsers.base import ParseRequest, ParseResult, ResourceParser
-from videocenter.services.parsers.errors import ParserNotFoundError
+from videocenter.services.parsers.errors import (
+    ParseFailedError,
+    ParserNotFoundError,
+    ParseTimeoutError,
+)
 
 
 class ParserRegistry:
-    def __init__(self, parsers: Iterable[ResourceParser] = ()) -> None:
+    def __init__(
+        self,
+        parsers: Iterable[ResourceParser] = (),
+        *,
+        timeout_seconds: float = 30,
+        max_attempts: int = 3,
+        retry_delay_seconds: float = 0.5,
+        retry_max_delay_seconds: float = 5,
+    ) -> None:
+        if timeout_seconds <= 0:
+            raise ValueError("解析超时时间必须大于零")
+        if max_attempts < 1:
+            raise ValueError("解析尝试次数必须大于零")
+        if retry_delay_seconds < 0 or retry_max_delay_seconds < retry_delay_seconds:
+            raise ValueError("解析重试延迟配置无效")
+        self.timeout_seconds = timeout_seconds
+        self.max_attempts = max_attempts
+        self.retry_delay_seconds = retry_delay_seconds
+        self.retry_max_delay_seconds = retry_max_delay_seconds
         self._parsers: dict[str, ResourceParser] = {}
         for parser in parsers:
             self.register(parser)
@@ -77,10 +101,57 @@ class ParserRegistry:
 
     async def parse(self, request: ParseRequest) -> ParseResult:
         parser = self.select(request)
-        result = await parser.parse(request)
-        if not isinstance(result, ParseResult):
-            raise TypeError(f"解析器 {parser.name} 返回了无效的解析结果")
-        return result
+        last_error: Exception | None = None
+        timed_out = False
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                async with asyncio.timeout(self.timeout_seconds):
+                    result = await parser.parse(request)
+                if not isinstance(result, ParseResult):
+                    raise TypeError(f"解析器 {parser.name} 返回了无效的解析结果")
+                return result
+            except TimeoutError as exc:
+                last_error = exc
+                timed_out = True
+            except Exception as exc:
+                if not self._is_retryable(exc):
+                    raise
+                last_error = exc
+                timed_out = False
+
+            if attempt < self.max_attempts:
+                delay = min(
+                    self.retry_delay_seconds * (2 ** (attempt - 1)),
+                    self.retry_max_delay_seconds,
+                )
+                if delay:
+                    await asyncio.sleep(delay)
+
+        if timed_out:
+            raise ParseTimeoutError(
+                parser_name=parser.name,
+                hostname=request.hostname,
+                attempts=self.max_attempts,
+                timeout_seconds=self.timeout_seconds,
+            ) from last_error
+        raise ParseFailedError(
+            parser_name=parser.name,
+            hostname=request.hostname,
+            attempts=self.max_attempts,
+            reason=type(last_error).__name__ if last_error else "UnknownError",
+        ) from last_error
+
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        if isinstance(exc, urllib.error.HTTPError):
+            return exc.code == 429 or 500 <= exc.code < 600
+        return isinstance(
+            exc,
+            (
+                ConnectionError,
+                urllib.error.URLError,
+            ),
+        )
 
     async def parse_url(
         self,

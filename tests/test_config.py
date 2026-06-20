@@ -61,3 +61,34 @@ def test_production_rejects_wildcard_cors():
             cors_origins=["*"],
             _env_file=None,
         )
+
+
+def test_parser_retry_settings_are_configurable():
+    settings = Settings(
+        parser_timeout_seconds=12,
+        parser_max_attempts=4,
+        parser_retry_delay_seconds=0.25,
+        parser_retry_max_delay_seconds=2,
+        _env_file=None,
+    )
+
+    assert settings.parser_timeout_seconds == 12
+    assert settings.parser_max_attempts == 4
+    assert settings.parser_retry_delay_seconds == 0.25
+    assert settings.parser_retry_max_delay_seconds == 2
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"parser_timeout_seconds": 0},
+        {"parser_max_attempts": 0},
+        {
+            "parser_retry_delay_seconds": 2,
+            "parser_retry_max_delay_seconds": 1,
+        },
+    ],
+)
+def test_invalid_parser_retry_settings_are_rejected(values):
+    with pytest.raises(ValidationError):
+        Settings(**values, _env_file=None)

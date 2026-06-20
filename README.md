@@ -230,6 +230,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 资源页面预解析、用户确认以及保存入库流程请参阅
 [资源预解析确认保存文档](docs/parse-preview-confirm-save.md)。
 
+解析超时、指数退避和临时失败重试规则请参阅
+[解析超时与重试文档](docs/parser-timeout-and-retry.md)。
+
 ## 项目结构
 
 ```text

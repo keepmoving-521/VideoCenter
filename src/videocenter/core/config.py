@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     database_echo: bool = False
     database_url: str = "sqlite:///./data/videocenter.db"
     media_root: Path = Path("./data/media")
+    parser_timeout_seconds: float = 30
+    parser_max_attempts: int = 3
+    parser_retry_delay_seconds: float = 0.5
+    parser_retry_max_delay_seconds: float = 5
     api_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
@@ -74,6 +78,32 @@ class Settings(BaseSettings):
         if value < 1:
             raise ValueError("Log rotation values must be greater than zero")
         return value
+
+    @field_validator(
+        "parser_timeout_seconds",
+        "parser_retry_delay_seconds",
+        "parser_retry_max_delay_seconds",
+    )
+    @classmethod
+    def validate_parser_time_values(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("Parser time values cannot be negative")
+        return value
+
+    @field_validator("parser_max_attempts")
+    @classmethod
+    def validate_parser_max_attempts(cls, value: int) -> int:
+        if value < 1 or value > 10:
+            raise ValueError("Parser max attempts must be between 1 and 10")
+        return value
+
+    @model_validator(mode="after")
+    def validate_parser_timeout(self) -> "Settings":
+        if self.parser_timeout_seconds <= 0:
+            raise ValueError("Parser timeout must be greater than zero")
+        if self.parser_retry_max_delay_seconds < self.parser_retry_delay_seconds:
+            raise ValueError("Parser retry max delay cannot be less than retry delay")
+        return self
 
     @model_validator(mode="after")
     def validate_environment_safety(self) -> "Settings":

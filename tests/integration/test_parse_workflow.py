@@ -206,3 +206,37 @@ def test_save_rejects_duplicate_source_page(
         code="PARSED_MEDIA_ALREADY_EXISTS",
     )
     assert error["error"]["details"]["media_id"] > 0
+
+
+def test_preview_returns_standard_timeout_error(
+    api_client: TestClient,
+    api_assertions: ApiAssertions,
+):
+    class SlowParser(WorkflowParser):
+        name = "slow-workflow"
+
+        async def parse(self, request: ParseRequest) -> ParseResult:
+            import asyncio
+
+            await asyncio.sleep(0.05)
+            return await super().parse(request)
+
+    app.dependency_overrides[get_parser_registry] = lambda: ParserRegistry(
+        [SlowParser()],
+        timeout_seconds=0.005,
+        max_attempts=2,
+        retry_delay_seconds=0,
+    )
+    try:
+        error = api_assertions.assert_error(
+            api_client.post(
+                "/api/v1/parsing/preview",
+                json={"source_url": "https://parse.test/show/1"},
+            ),
+            status_code=504,
+            code="PARSE_TIMEOUT",
+        )
+    finally:
+        app.dependency_overrides.pop(get_parser_registry, None)
+
+    assert error["error"]["details"]["attempts"] == 2
