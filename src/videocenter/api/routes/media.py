@@ -33,6 +33,38 @@ from videocenter.services.media_library import delete_media_records
 router = APIRouter()
 
 
+def _media_page(
+    db: Session,
+    *,
+    page: int,
+    page_size: int,
+    filters: list,
+    order_expression,
+) -> MediaPage:
+    total = db.scalar(select(func.count(Media.id)).where(*filters)) or 0
+    total_pages = (total + page_size - 1) // page_size
+    items = db.scalars(
+        select(Media)
+        .where(*filters)
+        .options(
+            selectinload(Media.resources),
+            selectinload(Media.tags),
+        )
+        .order_by(order_expression, Media.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return MediaPage(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_previous=page > 1 and total_pages > 0,
+    )
+
+
 @router.get("", response_model=MediaPage)
 def list_media(
     query: Annotated[
@@ -94,28 +126,12 @@ def list_media(
         else sort_column.desc().nulls_last()
     )
 
-    total = db.scalar(select(func.count(Media.id)).where(*filters)) or 0
-    total_pages = (total + page_size - 1) // page_size
-    statement = (
-        select(Media)
-        .where(*filters)
-        .options(
-            selectinload(Media.resources),
-            selectinload(Media.tags),
-        )
-        .order_by(order_expression, Media.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    items = db.scalars(statement).all()
-    return MediaPage(
-        items=items,
-        total=total,
+    return _media_page(
+        db,
         page=page,
         page_size=page_size,
-        total_pages=total_pages,
-        has_next=page < total_pages,
-        has_previous=page > 1 and total_pages > 0,
+        filters=filters,
+        order_expression=order_expression,
     )
 
 
@@ -147,6 +163,36 @@ def merge_media(
 @router.get("/stats", response_model=MediaLibraryStats)
 def media_library_stats(db: Session = Depends(get_db)):
     return get_media_library_stats(db)
+
+
+@router.get("/recent", response_model=MediaPage, tags=["影视库"])
+def list_recent_media(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    return _media_page(
+        db,
+        page=page,
+        page_size=page_size,
+        filters=[],
+        order_expression=Media.created_at.desc(),
+    )
+
+
+@router.get("/favorites", response_model=MediaPage, tags=["影视收藏"])
+def list_favorite_media(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    return _media_page(
+        db,
+        page=page,
+        page_size=page_size,
+        filters=[Media.is_favorite.is_(True)],
+        order_expression=Media.created_at.desc(),
+    )
 
 
 @router.put(

@@ -277,6 +277,8 @@ src/videocenter/
 | 重复影视检测 | `GET /api/v1/media/duplicates` |
 | 重复资源合并 | `POST /api/v1/media/merge` |
 | 影视库统计 | `GET /api/v1/media/stats` |
+| 最近添加 | `GET /api/v1/media/recent` |
+| 收藏影视 | `GET /api/v1/media/favorites` |
 | 下载任务 | `GET/POST /api/v1/downloads` |
 | 取消下载 | `POST /api/v1/downloads/{id}/cancel` |
 | 本地扫描 | `POST /api/v1/local-resources/scan` |
