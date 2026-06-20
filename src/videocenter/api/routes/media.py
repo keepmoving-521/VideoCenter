@@ -5,9 +5,11 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from videocenter.core.database import get_db
-from videocenter.core.exceptions import NotFoundError
+from videocenter.core.exceptions import ConflictError, NotFoundError
 from videocenter.models.media import Media, MediaStatus, MediaType, Season
 from videocenter.schemas.media import (
+    MediaBatchDeleteRequest,
+    MediaBatchDeleteResponse,
     MediaCreate,
     MediaDetailRead,
     MediaPage,
@@ -16,6 +18,7 @@ from videocenter.schemas.media import (
     MediaUpdate,
     SortOrder,
 )
+from videocenter.services.media_library import delete_media_records
 
 router = APIRouter()
 
@@ -133,7 +136,7 @@ def get_media(
     return media
 
 
-@router.patch("/{media_id}", response_model=MediaRead)
+@router.patch("/{media_id}", response_model=MediaDetailRead)
 def update_media(
     media_id: Annotated[int, Path(gt=0)],
     payload: MediaUpdate,
@@ -142,10 +145,37 @@ def update_media(
     media = db.get(Media, media_id)
     if not media:
         raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
+    if (
+        payload.media_type is not None
+        and payload.media_type != MediaType.SERIES
+        and media.media_type == MediaType.SERIES
+        and db.scalar(select(func.count(Season.id)).where(Season.media_id == media_id))
+    ):
+        raise ConflictError(
+            "存在季数据的电视剧不能直接修改为其他影片类型",
+            code="MEDIA_TYPE_HAS_SEASONS",
+        )
     for field, value in payload.to_model_values().items():
         setattr(media, field, value)
     db.commit()
     return get_media(media_id, db)
+
+
+@router.post(
+    "/batch-delete",
+    response_model=MediaBatchDeleteResponse,
+    tags=["影视库"],
+)
+def batch_delete_media(
+    payload: MediaBatchDeleteRequest,
+    db: Session = Depends(get_db),
+):
+    deleted_ids, missing_ids = delete_media_records(db, payload.media_ids)
+    return MediaBatchDeleteResponse(
+        deleted_count=len(deleted_ids),
+        deleted_ids=deleted_ids,
+        missing_ids=missing_ids,
+    )
 
 
 @router.delete("/{media_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -156,5 +186,4 @@ def delete_media(
     media = db.get(Media, media_id)
     if not media:
         raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
-    db.delete(media)
-    db.commit()
+    delete_media_records(db, [media_id])

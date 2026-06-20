@@ -120,9 +120,7 @@ class Media(Base):
         DateTime, server_default=func.now(), onupdate=func.now()
     )
 
-    resources: Mapped[list["LocalResource"]] = relationship(
-        back_populates="media", cascade="all, delete-orphan"
-    )
+    resources: Mapped[list["LocalResource"]] = relationship(back_populates="media")
     tags: Mapped[list["Tag"]] = relationship(
         secondary=media_tags,
         back_populates="media_items",

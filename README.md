@@ -245,6 +245,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 影视标题搜索、组合筛选、排序和完整详情查询请参阅
 [影视搜索筛选排序与详情文档](docs/media-search-filter-sort-detail.md)。
 
+影视信息编辑、关联清理和批量删除规则请参阅
+[影视编辑删除文档](docs/media-edit-delete.md)。
+
 ## 项目结构
 
 ```text

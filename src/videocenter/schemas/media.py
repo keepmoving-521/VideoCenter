@@ -328,6 +328,21 @@ class MediaDetailRead(MediaRead):
     seasons: list[SeasonWithEpisodesRead] = Field(default_factory=list)
 
 
+class MediaBatchDeleteRequest(ApiRequestModel):
+    media_ids: list[PositiveId] = Field(min_length=1, max_length=100)
+
+    @field_validator("media_ids")
+    @classmethod
+    def deduplicate_media_ids(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(value))
+
+
+class MediaBatchDeleteResponse(BaseModel):
+    deleted_count: int
+    deleted_ids: list[int]
+    missing_ids: list[int]
+
+
 class LocalScanRequest(ApiRequestModel):
     path: str | None = Field(default=None, min_length=1, max_length=2048)
     media_id: PositiveId | None = None
