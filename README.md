@@ -203,6 +203,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 影片、季和分集的关联查询请参阅
 [影片季集关联文档](docs/media-season-episode-association.md)。
 
+收藏、个人评分和私人备注请参阅
+[影视个人偏好文档](docs/media-personal-preferences.md)。
+
 ## 项目结构
 
 ```text

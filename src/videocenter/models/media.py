@@ -3,6 +3,7 @@ from enum import StrEnum
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Column,
     Date,
@@ -67,6 +68,10 @@ class Media(Base):
             "rating IS NULL OR (rating >= 0 AND rating <= 10)",
             name="ck_media_rating_range",
         ),
+        CheckConstraint(
+            "personal_rating IS NULL OR (personal_rating >= 0 AND personal_rating <= 10)",
+            name="ck_media_personal_rating_range",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -100,6 +105,14 @@ class Media(Base):
     genres: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     duration_minutes: Mapped[int | None] = mapped_column(Integer)
     rating: Mapped[float | None] = mapped_column(Float)
+    is_favorite: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="0",
+        index=True,
+    )
+    personal_rating: Mapped[float | None] = mapped_column(Float)
+    personal_notes: Mapped[str | None] = mapped_column(Text)
     poster_url: Mapped[str | None] = mapped_column(String(2048))
     background_url: Mapped[str | None] = mapped_column(String(2048))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

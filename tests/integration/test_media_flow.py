@@ -35,6 +35,9 @@ def test_media_crud_flow(
                 "genres": ["纪录片", "Technology"],
                 "duration_minutes": 95,
                 "rating": 8.6,
+                "is_favorite": True,
+                "personal_rating": 9.4,
+                "personal_notes": "  值得反复观看。  ",
             },
         ),
         201,
@@ -57,6 +60,9 @@ def test_media_crud_flow(
     assert created["genres"] == ["纪录片", "Technology"]
     assert created["duration_minutes"] == 95
     assert created["rating"] == 8.6
+    assert created["is_favorite"] is True
+    assert created["personal_rating"] == 9.4
+    assert created["personal_notes"] == "值得反复观看。"
 
     listed = api_assertions.assert_status(
         api_client.get("/api/v1/media", params={"query": "Integration"}),
@@ -64,6 +70,12 @@ def test_media_crud_flow(
     )
     assert listed is not None
     assert [item["id"] for item in listed] == [media_id]
+
+    favorites = api_assertions.assert_status(
+        api_client.get("/api/v1/media", params={"is_favorite": "true"}),
+        200,
+    )
+    assert [item["id"] for item in favorites] == [media_id]
 
     updated = api_assertions.assert_status(
         api_client.patch(
@@ -74,6 +86,9 @@ def test_media_crud_flow(
                 "release_date": "2025-01-01",
                 "status": "archived",
                 "rating": 9.1,
+                "is_favorite": False,
+                "personal_rating": 8.8,
+                "personal_notes": "更新后的个人备注",
             },
         ),
         200,
@@ -84,6 +99,25 @@ def test_media_crud_flow(
     assert updated["release_year"] == 2025
     assert updated["status"] == "archived"
     assert updated["rating"] == 9.1
+    assert updated["is_favorite"] is False
+    assert updated["personal_rating"] == 8.8
+    assert updated["personal_notes"] == "更新后的个人备注"
+
+    favorites = api_assertions.assert_status(
+        api_client.get("/api/v1/media", params={"is_favorite": "true"}),
+        200,
+    )
+    assert favorites == []
+
+    cleared = api_assertions.assert_status(
+        api_client.patch(
+            f"/api/v1/media/{media_id}",
+            json={"personal_rating": None, "personal_notes": "   "},
+        ),
+        200,
+    )
+    assert cleared["personal_rating"] is None
+    assert cleared["personal_notes"] is None
 
     api_assertions.assert_status(
         api_client.delete(f"/api/v1/media/{media_id}"),

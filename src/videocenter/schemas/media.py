@@ -70,12 +70,23 @@ class MediaCreate(ApiRequestModel):
     genres: list[str] = Field(default_factory=list, max_length=50)
     duration_minutes: int | None = Field(default=None, gt=0, le=100_000)
     rating: float | None = Field(default=None, ge=0, le=10)
+    is_favorite: bool = False
+    personal_rating: float | None = Field(default=None, ge=0, le=10)
+    personal_notes: str | None = Field(default=None, max_length=10_000)
     poster_url: HttpUrl | None = None
     background_url: HttpUrl | None = None
 
     @field_validator("description")
     @classmethod
     def normalize_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator("personal_notes")
+    @classmethod
+    def normalize_personal_notes(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = value.strip()
@@ -151,6 +162,9 @@ class MediaUpdate(ApiRequestModel):
     genres: list[str] | None = Field(default=None, max_length=50)
     duration_minutes: int | None = Field(default=None, gt=0, le=100_000)
     rating: float | None = Field(default=None, ge=0, le=10)
+    is_favorite: bool | None = None
+    personal_rating: float | None = Field(default=None, ge=0, le=10)
+    personal_notes: str | None = Field(default=None, max_length=10_000)
     poster_url: HttpUrl | None = None
     background_url: HttpUrl | None = None
 
@@ -164,6 +178,7 @@ class MediaUpdate(ApiRequestModel):
         "regions",
         "languages",
         "genres",
+        "is_favorite",
     )
     @classmethod
     def reject_required_field_nulls(cls, value):
@@ -174,6 +189,14 @@ class MediaUpdate(ApiRequestModel):
     @field_validator("description")
     @classmethod
     def normalize_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator("personal_notes")
+    @classmethod
+    def normalize_personal_notes(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = value.strip()
@@ -265,6 +288,9 @@ class MediaRead(BaseModel):
     genres: list[str]
     duration_minutes: int | None
     rating: float | None
+    is_favorite: bool
+    personal_rating: float | None
+    personal_notes: str | None
     poster_url: str | None
     background_url: str | None
     created_at: datetime

@@ -20,6 +20,7 @@ def list_media(
     ] = None,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    is_favorite: bool | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     statement = select(Media).options(
@@ -30,6 +31,8 @@ def list_media(
         statement = statement.where(
             or_(Media.title.contains(query), Media.original_title.contains(query))
         )
+    if is_favorite is not None:
+        statement = statement.where(Media.is_favorite == is_favorite)
     return db.scalars(statement.offset(offset).limit(limit).order_by(Media.id.desc())).all()
 
 

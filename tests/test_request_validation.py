@@ -142,11 +142,18 @@ def test_legacy_media_source_url_alias_is_accepted():
         ("duration_minutes", 0),
         ("rating", -0.1),
         ("rating", 10.1),
+        ("personal_rating", -0.1),
+        ("personal_rating", 10.1),
     ],
 )
 def test_media_duration_and_rating_ranges(field, value):
     with pytest.raises(ValidationError):
         MediaCreate(title="Movie", **{field: value})
+
+
+def test_personal_notes_are_trimmed_and_empty_notes_are_cleared():
+    assert MediaCreate(title="Movie", personal_notes="  私人备注  ").personal_notes == "私人备注"
+    assert MediaCreate(title="Movie", personal_notes="   ").personal_notes is None
 
 
 def test_release_year_must_match_release_date():
