@@ -25,5 +25,6 @@
 - [R02：解析结果数据结构](parser-result-structure.md)
 - [R03：根据 URL 自动选择解析器](parser-url-selection.md)
 - [R04：不支持网站的错误处理](unsupported-website-error.md)
+- [R05：通用网页基础信息解析](generic-webpage-parser.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

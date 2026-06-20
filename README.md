@@ -218,6 +218,9 @@ GitHub Actions 自动检查、测试与覆盖率流程请参阅
 不支持网站的错误代码、响应内容和安全规则请参阅
 [不支持网站错误处理文档](docs/unsupported-website-error.md)。
 
+普通网页的 JSON-LD、Open Graph 和 HTML 基础信息提取请参阅
+[通用网页解析器文档](docs/generic-webpage-parser.md)。
+
 ## 项目结构
 
 ```text
