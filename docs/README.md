@@ -28,5 +28,6 @@
 - [R05：通用网页基础信息解析](generic-webpage-parser.md)
 - [R06～R10：网页影片核心信息解析](webpage-core-metadata-parsing.md)
 - [R11～R14：视频、清晰度、字幕与电视剧季集解析](webpage-media-resources-and-series.md)
+- [R15～R17：资源预解析、确认与保存](parse-preview-confirm-save.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

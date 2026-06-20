@@ -7,11 +7,13 @@ from videocenter.api.routes import (
     history,
     local_resources,
     media,
+    parsing,
     streaming,
 )
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(parsing.router, prefix="/parsing")
 api_router.include_router(catalog.router)
 api_router.include_router(media.router, prefix="/media", tags=["影视库"])
 api_router.include_router(downloads.router, prefix="/downloads", tags=["下载管理"])

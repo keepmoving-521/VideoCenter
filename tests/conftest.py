@@ -34,6 +34,7 @@ from videocenter.models import (  # noqa: E402, F401
     Tag,
     WatchHistory,
 )
+from videocenter.services.parse_workflow import parse_workflow_store  # noqa: E402
 
 
 def assert_safe_test_database() -> None:
@@ -89,7 +90,9 @@ def clean_database_between_tests(
     test_database: Path,
 ) -> Generator[None, None, None]:
     del test_database
+    parse_workflow_store.clear()
     yield
+    parse_workflow_store.clear()
     with engine.begin() as connection:
         for table in reversed(Base.metadata.sorted_tables):
             connection.execute(delete(table))
