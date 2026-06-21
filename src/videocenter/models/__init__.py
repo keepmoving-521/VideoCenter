@@ -9,6 +9,7 @@ from videocenter.models.media import (
     Season,
     Tag,
 )
+from videocenter.models.notification import Notification, NotificationType
 
 __all__ = [
     "DownloadTask",
@@ -17,6 +18,8 @@ __all__ = [
     "Media",
     "MediaStatus",
     "MediaType",
+    "Notification",
+    "NotificationType",
     "Season",
     "Tag",
     "WatchHistory",

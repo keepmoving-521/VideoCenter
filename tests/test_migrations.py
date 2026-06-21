@@ -14,6 +14,7 @@ EXPECTED_TABLES = {
     "local_resources",
     "media",
     "media_tags",
+    "notifications",
     "seasons",
     "tags",
     "watch_history",

@@ -7,6 +7,7 @@ from videocenter.api.routes import (
     history,
     local_resources,
     media,
+    notifications,
     parsing,
     streaming,
 )
@@ -17,6 +18,7 @@ api_router.include_router(parsing.router, prefix="/parsing")
 api_router.include_router(catalog.router)
 api_router.include_router(media.router, prefix="/media", tags=["影视库"])
 api_router.include_router(downloads.router, prefix="/downloads", tags=["下载管理"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["通知"])
 api_router.include_router(local_resources.router, prefix="/local-resources", tags=["本地资源"])
 api_router.include_router(streaming.router, prefix="/stream", tags=["在线播放"])
 api_router.include_router(history.router, prefix="/history", tags=["观看历史"])

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from videocenter.models.download import DownloadStatus
 from videocenter.models.media import LocalResource, MediaStatus
+from videocenter.models.notification import Notification, NotificationType
 from videocenter.services.downloaders import (
     DownloadCancellationToken,
     Downloader,
@@ -139,6 +140,14 @@ def test_download_task_execution_uses_downloader_result(
     assert resource.mime_type == "video/mp4"
     db_session.refresh(media)
     assert media.status == MediaStatus.AVAILABLE
+    notification = db_session.scalar(
+        select(Notification).where(Notification.download_task_id == task.id)
+    )
+    assert notification is not None
+    assert notification.notification_type == NotificationType.DOWNLOAD_COMPLETED
+    assert notification.media_id == media.id
+    assert notification.title == "下载完成"
+    assert "Download Target" in notification.message
 
 
 def test_created_download_task_starts_in_waiting_status(
@@ -515,6 +524,104 @@ def test_download_task_writes_structured_lifecycle_logs(
         record for record in caplog.records if getattr(record, "download_task_id", None) == task.id
     ]
     assert all(record.download_task_id == task.id for record in records)
+
+
+def test_download_completion_notification_api_flow(
+    api_client: TestClient,
+    db_session: Session,
+    model_factory,
+):
+    media = model_factory.media(title="Notification Movie")
+    task = model_factory.download_task(
+        media=media,
+        source_url="https://example.com/notification.mp4",
+    )
+    _run_download(
+        task.id,
+        DownloadCancellationToken(),
+        downloader=FakeDownloader(),
+    )
+
+    unread_count = api_client.get("/api/v1/notifications/unread-count").json()
+    assert unread_count == {"unread_count": 1}
+
+    notifications = api_client.get(
+        "/api/v1/notifications",
+        params={"unread_only": "true"},
+    ).json()
+    assert len(notifications) == 1
+    notification = notifications[0]
+    assert notification["notification_type"] == "download_completed"
+    assert notification["download_task_id"] == task.id
+    assert notification["media_id"] == media.id
+    assert notification["read_at"] is None
+
+    read = api_client.post(f"/api/v1/notifications/{notification['id']}/read").json()
+    assert read["read_at"] is not None
+    assert api_client.get("/api/v1/notifications/unread-count").json() == {"unread_count": 0}
+
+    db_session.expire_all()
+    assert db_session.get(Notification, notification["id"]).read_at is not None
+
+
+def test_download_completion_notification_is_idempotent(
+    db_session: Session,
+    model_factory,
+):
+    from videocenter.services.notifications import (
+        create_download_completed_notification,
+    )
+
+    task = model_factory.download_task(status=DownloadStatus.COMPLETED)
+
+    first = create_download_completed_notification(db_session, task=task)
+    db_session.commit()
+    second = create_download_completed_notification(db_session, task=task)
+    db_session.commit()
+
+    assert first.id == second.id
+    assert (
+        len(
+            db_session.scalars(
+                select(Notification).where(Notification.download_task_id == task.id)
+            ).all()
+        )
+        == 1
+    )
+
+
+def test_notification_read_all_and_not_found(
+    api_client: TestClient,
+    api_assertions,
+    db_session: Session,
+    model_factory,
+):
+    from videocenter.services.notifications import (
+        create_download_completed_notification,
+    )
+
+    first = model_factory.download_task(status=DownloadStatus.COMPLETED)
+    second = model_factory.download_task(status=DownloadStatus.COMPLETED)
+    create_download_completed_notification(db_session, task=first)
+    create_download_completed_notification(db_session, task=second)
+    db_session.commit()
+
+    response = api_client.post("/api/v1/notifications/read-all")
+    assert response.status_code == 200
+    assert response.json() == {"updated_count": 2}
+    assert (
+        api_client.get(
+            "/api/v1/notifications",
+            params={"unread_only": "true"},
+        ).json()
+        == []
+    )
+
+    api_assertions.assert_error(
+        api_client.post("/api/v1/notifications/999999/read"),
+        status_code=404,
+        code="NOTIFICATION_NOT_FOUND",
+    )
 
 
 def test_restore_download_queue_recovers_unfinished_tasks_by_priority(

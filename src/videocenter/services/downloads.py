@@ -25,6 +25,7 @@ from videocenter.services.downloaders import (
     YtDlpDownloader,
 )
 from videocenter.services.downloaders.base import normalize_download_url
+from videocenter.services.notifications import create_download_completed_notification
 
 _default_downloader = HttpDirectDownloader()
 _yt_dlp_downloader = YtDlpDownloader()
@@ -478,6 +479,7 @@ def _run_download(
             task.checksum_sha256 = result.checksum
             task.status = DownloadStatus.COMPLETED
             register_local_resource(db, task=task, result=result)
+            create_download_completed_notification(db, task=task)
             db.flush()
             update_media_download_status(db, task.media_id)
             db.commit()
