@@ -1,9 +1,13 @@
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, status
+from fastapi import Path as ApiPath
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from videocenter.core.config import get_settings
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import BadRequestError, NotFoundError
 from videocenter.models.media import LocalResource, Media
@@ -32,6 +36,7 @@ from videocenter.services.local_library import (
     start_scan_task,
 )
 from videocenter.services.local_resource_associations import associate_local_resources
+from videocenter.services.media_artwork import MEDIA_CACHE_DIRECTORY_NAME
 
 router = APIRouter()
 
@@ -39,6 +44,27 @@ router = APIRouter()
 @router.get("", response_model=list[LocalResourceRead])
 def list_resources(db: Session = Depends(get_db)):
     return db.scalars(select(LocalResource).order_by(LocalResource.id.desc())).all()
+
+
+@router.get("/{resource_id}/cover")
+def get_resource_cover(
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    db: Session = Depends(get_db),
+):
+    resource = _get_resource_or_404(db, resource_id)
+    return _artwork_response(resource.cover_image_path)
+
+
+@router.get("/{resource_id}/previews/{preview_index}")
+def get_resource_preview(
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    preview_index: Annotated[int, ApiPath(ge=0)],
+    db: Session = Depends(get_db),
+):
+    resource = _get_resource_or_404(db, resource_id)
+    if preview_index >= len(resource.preview_thumbnail_paths):
+        raise NotFoundError("预览缩略图不存在", code="PREVIEW_THUMBNAIL_NOT_FOUND")
+    return _artwork_response(resource.preview_thumbnail_paths[preview_index])
 
 
 @router.get(
@@ -126,7 +152,7 @@ def scan_resources(payload: LocalScanRequest, db: Session = Depends(get_db)):
     response_model=LocalResourceRead,
 )
 def associate_resource(
-    resource_id: Annotated[int, Path(gt=0)],
+    resource_id: Annotated[int, ApiPath(gt=0)],
     payload: LocalResourceAssociationRequest,
     db: Session = Depends(get_db),
 ):
@@ -145,7 +171,7 @@ def associate_resource(
     response_model=LocalResourceRead,
 )
 def rename_resource(
-    resource_id: Annotated[int, Path(gt=0)],
+    resource_id: Annotated[int, ApiPath(gt=0)],
     payload: LocalResourceRenameRequest,
     db: Session = Depends(get_db),
 ):
@@ -161,7 +187,7 @@ def rename_resource(
     response_model=LocalResourceRead,
 )
 def safely_delete_resource_file(
-    resource_id: Annotated[int, Path(gt=0)],
+    resource_id: Annotated[int, ApiPath(gt=0)],
     db: Session = Depends(get_db),
 ):
     return safely_delete_local_resource(db, resource_id=resource_id)
@@ -174,10 +200,29 @@ def list_scan_tasks(db: Session = Depends(get_db)):
 
 @router.get("/scan-tasks/{task_id}", response_model=ScanTaskRead)
 def get_scan_task(
-    task_id: Annotated[int, Path(gt=0)],
+    task_id: Annotated[int, ApiPath(gt=0)],
     db: Session = Depends(get_db),
 ):
     task = db.get(ScanTask, task_id)
     if task is None:
         raise NotFoundError("扫描任务不存在", code="SCAN_TASK_NOT_FOUND")
     return task
+
+
+def _get_resource_or_404(db: Session, resource_id: int) -> LocalResource:
+    resource = db.get(LocalResource, resource_id)
+    if resource is None:
+        raise NotFoundError("本地资源不存在", code="LOCAL_RESOURCE_NOT_FOUND")
+    return resource
+
+
+def _artwork_response(file_path: str | None) -> FileResponse:
+    if file_path is None:
+        raise NotFoundError("视频视觉资源不存在", code="VIDEO_ARTWORK_NOT_FOUND")
+    path = Path(file_path).resolve()
+    cache_root = (get_settings().media_root / MEDIA_CACHE_DIRECTORY_NAME).resolve()
+    if not path.is_relative_to(cache_root):
+        raise NotFoundError("视频视觉资源路径无效", code="INVALID_VIDEO_ARTWORK_PATH")
+    if not path.is_file():
+        raise NotFoundError("视频视觉资源文件已丢失", code="VIDEO_ARTWORK_FILE_MISSING")
+    return FileResponse(path, media_type="image/jpeg")

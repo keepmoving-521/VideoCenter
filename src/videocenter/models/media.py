@@ -242,6 +242,13 @@ class LocalResource(Base):
         default=list,
         server_default="[]",
     )
+    cover_image_path: Mapped[str | None] = mapped_column(String(2048))
+    preview_thumbnail_paths: Mapped[list[str]] = mapped_column(
+        JSON,
+        default=list,
+        server_default="[]",
+    )
+    visual_assets_generated: Mapped[bool | None] = mapped_column(Boolean)
     media_info_probed: Mapped[bool] = mapped_column(
         Boolean,
         default=False,

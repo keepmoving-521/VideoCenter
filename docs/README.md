@@ -60,5 +60,6 @@
 - [A01～A02：FFmpeg/FFprobe 检测与路径配置](ffmpeg-detection-configuration.md)
 - [A03～A06：视频时长、分辨率、编码与码率](video-media-information.md)
 - [A07～A09：音频编码、音轨声道与内嵌字幕](audio-subtitle-stream-information.md)
+- [A10～A11：自动生成视频封面与预览缩略图](video-cover-preview-generation.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

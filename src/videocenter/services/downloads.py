@@ -27,6 +27,7 @@ from videocenter.services.downloaders import (
 )
 from videocenter.services.downloaders.base import normalize_download_url
 from videocenter.services.local_file_hashes import calculate_sha256
+from videocenter.services.media_artwork import generate_video_artwork
 from videocenter.services.media_probe import probe_video_file
 from videocenter.services.notifications import create_download_completed_notification
 from videocenter.services.video_filename import parse_video_filename
@@ -356,6 +357,14 @@ def register_local_resource(
         resource.embedded_subtitles = (
             [asdict(track) for track in media_info.subtitle_tracks] if media_info else []
         )
+        artwork = generate_video_artwork(
+            result.target_path,
+            checksum_sha256=resource.checksum_sha256,
+            duration_seconds=media_info.duration_seconds if media_info else None,
+        )
+        resource.visual_assets_generated = artwork is not None
+        resource.cover_image_path = artwork.cover_image_path if artwork else None
+        resource.preview_thumbnail_paths = list(artwork.preview_thumbnail_paths) if artwork else []
     return resource
 
 

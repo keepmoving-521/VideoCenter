@@ -14,6 +14,11 @@ from videocenter.models.media import LocalResource
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 from videocenter.services.downloads import update_media_download_status
 from videocenter.services.local_file_hashes import calculate_sha256
+from videocenter.services.media_artwork import (
+    MEDIA_CACHE_DIRECTORY_NAME,
+    GeneratedVideoArtwork,
+    generate_video_artwork,
+)
 from videocenter.services.media_probe import VideoMediaInfo, probe_video_file
 from videocenter.services.video_filename import ParsedVideoFilename, parse_video_filename
 
@@ -82,6 +87,7 @@ def run_scan_task(task_id: int) -> None:
                 if path.is_file()
                 and path.suffix.lower() in VIDEO_EXTENSIONS
                 and TRASH_DIRECTORY_NAME not in path.parts
+                and MEDIA_CACHE_DIRECTORY_NAME not in path.parts
             )
             task.total_files = len(files)
             task.discovered_files = len(files)
@@ -155,6 +161,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
         and resource.parsed_title is not None
         and resource.checksum_sha256 is not None
         and resource.media_info_probed
+        and resource.visual_assets_generated is not None
     ):
         task.skipped_files += 1
         return resource.media_id
@@ -163,6 +170,11 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     parsed = parse_video_filename(path.name)
     checksum_sha256 = calculate_sha256(path)
     media_info = probe_video_file(path)
+    artwork = generate_video_artwork(
+        path,
+        checksum_sha256=checksum_sha256,
+        duration_seconds=media_info.duration_seconds if media_info else None,
+    )
     if resource is None:
         resource = LocalResource(
             media_id=task.media_id,
@@ -175,6 +187,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
         )
         _apply_parsed_filename(resource, parsed)
         _apply_media_info(resource, media_info)
+        _apply_artwork(resource, artwork)
         db.add(resource)
         task.added_files += 1
         return task.media_id
@@ -189,6 +202,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     resource.missing_at = None
     _apply_parsed_filename(resource, parsed)
     _apply_media_info(resource, media_info)
+    _apply_artwork(resource, artwork)
     if task.media_id is not None:
         resource.media_id = task.media_id
     if was_missing:
@@ -226,6 +240,15 @@ def _apply_media_info(
     resource.embedded_subtitles = (
         [asdict(track) for track in media_info.subtitle_tracks] if media_info else []
     )
+
+
+def _apply_artwork(
+    resource: LocalResource,
+    artwork: GeneratedVideoArtwork | None,
+) -> None:
+    resource.visual_assets_generated = artwork is not None
+    resource.cover_image_path = artwork.cover_image_path if artwork else None
+    resource.preview_thumbnail_paths = list(artwork.preview_thumbnail_paths) if artwork else []
 
 
 def _mark_missing_resources(

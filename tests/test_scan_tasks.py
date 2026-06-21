@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from videocenter.models.media import LocalResource, MediaStatus
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 from videocenter.services.local_library import restore_scan_tasks, run_scan_task
+from videocenter.services.media_artwork import GeneratedVideoArtwork
 from videocenter.services.media_probe import (
     AudioTrackInfo,
     SubtitleTrackInfo,
@@ -192,6 +193,15 @@ def test_scan_probes_video_media_information(
             ),
         ),
     )
+    cover = root / "generated-cover.jpg"
+    preview = root / "generated-preview.jpg"
+    monkeypatch.setattr(
+        "videocenter.services.local_library.generate_video_artwork",
+        lambda path, **kwargs: GeneratedVideoArtwork(
+            cover_image_path=str(cover),
+            preview_thumbnail_paths=(str(preview),),
+        ),
+    )
 
     try:
         task_id = api_client.post(
@@ -211,6 +221,9 @@ def test_scan_probes_video_media_information(
         assert resource["audio_tracks"][0]["channel_layout"] == "stereo"
         assert resource["embedded_subtitles"][0]["codec"] == "ass"
         assert resource["embedded_subtitles"][0]["language"] == "chi"
+        assert resource["cover_image_path"] == str(cover)
+        assert resource["preview_thumbnail_paths"] == [str(preview)]
+        assert resource["visual_assets_generated"] is True
         assert db_session.query(LocalResource).one().media_info_probed is True
     finally:
         video.unlink(missing_ok=True)

@@ -303,6 +303,9 @@ class LocalResourceRead(BaseModel):
     audio_codec: str | None
     audio_tracks: list[AudioTrackRead]
     embedded_subtitles: list[EmbeddedSubtitleRead]
+    cover_image_path: str | None
+    preview_thumbnail_paths: list[str]
+    visual_assets_generated: bool | None
     modified_at_ns: int | None
     checksum_sha256: str | None
     detected_media_type: MediaType | None
