@@ -13,6 +13,7 @@ EXPECTED_TABLES = {
     "episodes",
     "local_resources",
     "media",
+    "media_directories",
     "media_tags",
     "notifications",
     "seasons",

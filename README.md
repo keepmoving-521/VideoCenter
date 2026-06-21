@@ -192,6 +192,9 @@ python -m pytest
 下载完成后的站内通知、未读数量和已读操作请参阅
 [下载完成通知文档](docs/download-completion-notifications.md)。
 
+多媒体目录配置、默认目录和启用状态请参阅
+[媒体目录配置文档](docs/media-directory-configuration.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

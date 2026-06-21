@@ -9,6 +9,7 @@ from videocenter.models.media import (
     Season,
     Tag,
 )
+from videocenter.models.media_directory import MediaDirectory
 from videocenter.models.notification import Notification, NotificationType
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "Episode",
     "LocalResource",
     "Media",
+    "MediaDirectory",
     "MediaStatus",
     "MediaType",
     "Notification",

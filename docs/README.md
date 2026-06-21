@@ -49,5 +49,6 @@
 - [D23：yt-dlp 下载器](yt-dlp-downloader.md)
 - [D24～D27：清晰度、格式、字幕与封面](download-quality-format-subtitles-thumbnail.md)
 - [D28：下载完成通知](download-completion-notifications.md)
+- [F01：媒体目录配置模型](media-directory-configuration.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

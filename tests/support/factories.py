@@ -14,6 +14,7 @@ from videocenter.models.media import (
     Season,
     Tag,
 )
+from videocenter.models.media_directory import MediaDirectory
 
 
 class ModelFactory:
@@ -60,6 +61,18 @@ class ModelFactory:
         }
         values.update(overrides)
         return self._save(Tag(**values))
+
+    def media_directory(self, **overrides) -> MediaDirectory:
+        unique_name = uuid4().hex
+        values = {
+            "name": f"Directory {unique_name[:8]}",
+            "path": str((Path("data/media") / unique_name).resolve()),
+            "is_default": False,
+            "is_enabled": True,
+            "auto_scan": True,
+        }
+        values.update(overrides)
+        return self._save(MediaDirectory(**values))
 
     def season(
         self,

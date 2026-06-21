@@ -30,6 +30,7 @@ from videocenter.models import (  # noqa: E402, F401
     Episode,
     LocalResource,
     Media,
+    MediaDirectory,
     Notification,
     Season,
     Tag,
