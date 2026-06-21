@@ -1,4 +1,7 @@
+import re
 from dataclasses import dataclass
+
+_RANGE_PATTERN = re.compile(r"^\s*bytes\s*=\s*(.*?)\s*$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -14,10 +17,28 @@ class ByteRange:
 def parse_range_header(value: str | None, file_size: int) -> ByteRange | None:
     if not value:
         return None
-    if not value.startswith("bytes=") or "," in value:
-        raise ValueError("不支持的 Range 请求")
+    if file_size < 0:
+        raise ValueError("文件大小无效")
 
-    start_text, end_text = value.removeprefix("bytes=").split("-", maxsplit=1)
+    match = _RANGE_PATTERN.fullmatch(value)
+    if match is None:
+        raise ValueError("不支持的 Range 请求")
+    range_spec = match.group(1)
+    if "," in range_spec:
+        raise ValueError("不支持多段 Range 请求")
+    if "-" not in range_spec:
+        raise ValueError("无效的 Range 请求")
+
+    start_text, end_text = (part.strip() for part in range_spec.split("-", maxsplit=1))
+    if not start_text and not end_text:
+        raise ValueError("无效的 Range 请求")
+    if start_text and not start_text.isdigit():
+        raise ValueError("无效的 Range 起始位置")
+    if end_text and not end_text.isdigit():
+        raise ValueError("无效的 Range 结束位置")
+    if file_size == 0:
+        raise ValueError("空文件不支持 Range 请求")
+
     if not start_text:
         suffix_length = int(end_text)
         if suffix_length <= 0:

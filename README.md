@@ -234,6 +234,9 @@ FFmpeg、FFprobe 的自动检测和自定义路径配置请参阅
 后台分析任务进度、失败明细和重试机制请参阅
 [分析任务进度与重试文档](docs/analysis-task-progress-retry.md)。
 
+视频在线播放的 Range 分段响应和 HEAD 预检请参阅
+[HTTP Range 与 HEAD 文档](docs/http-range-head-streaming.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

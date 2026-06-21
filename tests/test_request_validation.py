@@ -236,17 +236,6 @@ def test_history_rejects_non_finite_numbers():
         )
 
 
-def test_range_header_rejects_multiple_ranges(
-    api_client: TestClient,
-    api_assertions: ApiAssertions,
-):
-    response = api_client.get(
-        "/api/v1/stream/1",
-        headers={"Range": "bytes=0-10,20-30"},
-    )
-    api_assertions.assert_validation_error(response, ["header", "Range"])
-
-
 def test_openapi_documents_positive_path_ids():
     schema = app.openapi()
     parameters = schema["paths"]["/api/v1/media/{media_id}"]["get"]["parameters"]

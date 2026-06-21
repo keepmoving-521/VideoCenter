@@ -63,5 +63,6 @@
 - [A10～A11：自动生成视频封面与预览缩略图](video-cover-preview-generation.md)
 - [A12～A13：下载自动分析与已有视频批量分析](automatic-batch-video-analysis.md)
 - [A14～A15：分析任务进度与失败重试](analysis-task-progress-retry.md)
+- [P01～P02：HTTP Range 与视频 HEAD 请求](http-range-head-streaming.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。
