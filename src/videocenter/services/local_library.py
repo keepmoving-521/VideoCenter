@@ -1,7 +1,6 @@
 import logging
 import mimetypes
 import threading
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
@@ -14,12 +13,8 @@ from videocenter.models.media import LocalResource
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 from videocenter.services.downloads import update_media_download_status
 from videocenter.services.local_file_hashes import calculate_sha256
-from videocenter.services.media_artwork import (
-    MEDIA_CACHE_DIRECTORY_NAME,
-    GeneratedVideoArtwork,
-    generate_video_artwork,
-)
-from videocenter.services.media_probe import VideoMediaInfo, probe_video_file
+from videocenter.services.local_resource_analysis import analyze_local_resource
+from videocenter.services.media_artwork import MEDIA_CACHE_DIRECTORY_NAME
 from videocenter.services.video_filename import ParsedVideoFilename, parse_video_filename
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".ts"}
@@ -169,12 +164,6 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     parsed = parse_video_filename(path.name)
     checksum_sha256 = calculate_sha256(path)
-    media_info = probe_video_file(path)
-    artwork = generate_video_artwork(
-        path,
-        checksum_sha256=checksum_sha256,
-        duration_seconds=media_info.duration_seconds if media_info else None,
-    )
     if resource is None:
         resource = LocalResource(
             media_id=task.media_id,
@@ -186,8 +175,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
             checksum_sha256=checksum_sha256,
         )
         _apply_parsed_filename(resource, parsed)
-        _apply_media_info(resource, media_info)
-        _apply_artwork(resource, artwork)
+        analyze_local_resource(resource, force=True)
         db.add(resource)
         task.added_files += 1
         return task.media_id
@@ -201,8 +189,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     resource.is_available = True
     resource.missing_at = None
     _apply_parsed_filename(resource, parsed)
-    _apply_media_info(resource, media_info)
-    _apply_artwork(resource, artwork)
+    analyze_local_resource(resource, force=True)
     if task.media_id is not None:
         resource.media_id = task.media_id
     if was_missing:
@@ -221,34 +208,6 @@ def _apply_parsed_filename(
     resource.parsed_release_year = parsed.release_year
     resource.parsed_season_number = parsed.season_number
     resource.parsed_episode_number = parsed.episode_number
-
-
-def _apply_media_info(
-    resource: LocalResource,
-    media_info: VideoMediaInfo | None,
-) -> None:
-    resource.media_info_probed = True
-    resource.duration_seconds = media_info.duration_seconds if media_info else None
-    resource.video_width = media_info.width if media_info else None
-    resource.video_height = media_info.height if media_info else None
-    resource.video_codec = media_info.video_codec if media_info else None
-    resource.bitrate = media_info.bitrate if media_info else None
-    resource.audio_codec = media_info.audio_codec if media_info else None
-    resource.audio_tracks = (
-        [asdict(track) for track in media_info.audio_tracks] if media_info else []
-    )
-    resource.embedded_subtitles = (
-        [asdict(track) for track in media_info.subtitle_tracks] if media_info else []
-    )
-
-
-def _apply_artwork(
-    resource: LocalResource,
-    artwork: GeneratedVideoArtwork | None,
-) -> None:
-    resource.visual_assets_generated = artwork is not None
-    resource.cover_image_path = artwork.cover_image_path if artwork else None
-    resource.preview_thumbnail_paths = list(artwork.preview_thumbnail_paths) if artwork else []
 
 
 def _mark_missing_resources(

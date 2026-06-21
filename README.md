@@ -228,6 +228,9 @@ FFmpeg、FFprobe 的自动检测和自定义路径配置请参阅
 视频封面和预览缩略图自动生成请参阅
 [视频封面与预览图文档](docs/video-cover-preview-generation.md)。
 
+下载完成自动分析和已有本地视频批量分析请参阅
+[自动与批量视频分析文档](docs/automatic-batch-video-analysis.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

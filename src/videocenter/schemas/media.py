@@ -350,6 +350,30 @@ class InvalidLocalResourceCleanupResponse(BaseModel):
     deleted_resource_ids: list[int]
 
 
+class LocalResourceBatchAnalysisRequest(ApiRequestModel):
+    resource_ids: list[PositiveId] = Field(min_length=1, max_length=100)
+    force: bool = False
+
+    @field_validator("resource_ids")
+    @classmethod
+    def deduplicate_analysis_resource_ids(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(value))
+
+
+class LocalResourceAnalysisFailure(BaseModel):
+    resource_id: int
+    error: str
+
+
+class LocalResourceBatchAnalysisResponse(BaseModel):
+    requested_count: int
+    analyzed_count: int
+    analyzed_resource_ids: list[int]
+    skipped_resource_ids: list[int]
+    missing_resource_ids: list[int]
+    failures: list[LocalResourceAnalysisFailure]
+
+
 class DuplicateLocalResourceGroup(BaseModel):
     checksum_sha256: str
     file_size: int

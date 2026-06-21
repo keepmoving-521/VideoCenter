@@ -3,7 +3,6 @@ import logging
 import re
 import threading
 import time
-from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -27,8 +26,7 @@ from videocenter.services.downloaders import (
 )
 from videocenter.services.downloaders.base import normalize_download_url
 from videocenter.services.local_file_hashes import calculate_sha256
-from videocenter.services.media_artwork import generate_video_artwork
-from videocenter.services.media_probe import probe_video_file
+from videocenter.services.local_resource_analysis import analyze_local_resource
 from videocenter.services.notifications import create_download_completed_notification
 from videocenter.services.video_filename import parse_video_filename
 
@@ -343,28 +341,7 @@ def register_local_resource(
     resource.parsed_episode_number = parsed.episode_number
     if result.target_path.exists():
         resource.modified_at_ns = result.target_path.stat().st_mtime_ns
-        media_info = probe_video_file(result.target_path)
-        resource.media_info_probed = True
-        resource.duration_seconds = media_info.duration_seconds if media_info else None
-        resource.video_width = media_info.width if media_info else None
-        resource.video_height = media_info.height if media_info else None
-        resource.video_codec = media_info.video_codec if media_info else None
-        resource.bitrate = media_info.bitrate if media_info else None
-        resource.audio_codec = media_info.audio_codec if media_info else None
-        resource.audio_tracks = (
-            [asdict(track) for track in media_info.audio_tracks] if media_info else []
-        )
-        resource.embedded_subtitles = (
-            [asdict(track) for track in media_info.subtitle_tracks] if media_info else []
-        )
-        artwork = generate_video_artwork(
-            result.target_path,
-            checksum_sha256=resource.checksum_sha256,
-            duration_seconds=media_info.duration_seconds if media_info else None,
-        )
-        resource.visual_assets_generated = artwork is not None
-        resource.cover_image_path = artwork.cover_image_path if artwork else None
-        resource.preview_thumbnail_paths = list(artwork.preview_thumbnail_paths) if artwork else []
+        analyze_local_resource(resource, force=True)
     return resource
 
 

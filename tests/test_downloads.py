@@ -458,6 +458,42 @@ def test_local_resource_registration_is_idempotent(
     assert len(resources) == 1
 
 
+def test_download_registration_automatically_analyzes_video(
+    db_session: Session,
+    model_factory,
+    tmp_path: Path,
+    monkeypatch,
+):
+    media = model_factory.media(title="Auto analyzed")
+    task = model_factory.download_task(media=media)
+    target = (tmp_path / "analyzed.mp4").resolve()
+    target.write_bytes(b"video")
+    result = DownloadResult(
+        target_path=target,
+        file_size=target.stat().st_size,
+        mime_type="video/mp4",
+        checksum="c" * 64,
+    )
+    calls: list[tuple[str, bool]] = []
+
+    def fake_analyze(resource, *, force=False):
+        calls.append((resource.file_path, force))
+        resource.media_info_probed = True
+        resource.video_codec = "h264"
+        return "analyzed"
+
+    monkeypatch.setattr(
+        "videocenter.services.downloads.analyze_local_resource",
+        fake_analyze,
+    )
+
+    resource = register_local_resource(db_session, task=task, result=result)
+
+    assert calls == [(str(target), True)]
+    assert resource.media_info_probed is True
+    assert resource.video_codec == "h264"
+
+
 def test_failed_download_restores_media_to_pending(
     db_session: Session,
     model_factory,

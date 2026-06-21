@@ -17,6 +17,8 @@ from videocenter.schemas.media import (
     DuplicateLocalResourcesResponse,
     InvalidLocalResourceCleanupResponse,
     LocalResourceAssociationRequest,
+    LocalResourceBatchAnalysisRequest,
+    LocalResourceBatchAnalysisResponse,
     LocalResourceBatchAssociationRequest,
     LocalResourceBatchAssociationResponse,
     LocalResourceRead,
@@ -35,6 +37,7 @@ from videocenter.services.local_library import (
     resolve_library_path,
     start_scan_task,
 )
+from videocenter.services.local_resource_analysis import analyze_local_resource
 from videocenter.services.local_resource_associations import associate_local_resources
 from videocenter.services.media_artwork import MEDIA_CACHE_DIRECTORY_NAME
 
@@ -101,6 +104,52 @@ def cleanup_invalid_resources(db: Session = Depends(get_db)):
     return InvalidLocalResourceCleanupResponse(
         deleted_count=len(deleted_ids),
         deleted_resource_ids=deleted_ids,
+    )
+
+
+@router.post(
+    "/batch-analyze",
+    response_model=LocalResourceBatchAnalysisResponse,
+)
+def batch_analyze_resources(
+    payload: LocalResourceBatchAnalysisRequest,
+    db: Session = Depends(get_db),
+):
+    resources = {
+        resource.id: resource
+        for resource in db.scalars(
+            select(LocalResource).where(LocalResource.id.in_(payload.resource_ids))
+        ).all()
+    }
+    analyzed_ids: list[int] = []
+    skipped_ids: list[int] = []
+    missing_ids: list[int] = []
+    failures: list[dict[str, object]] = []
+    for resource_id in payload.resource_ids:
+        resource = resources.get(resource_id)
+        if resource is None:
+            missing_ids.append(resource_id)
+            continue
+        try:
+            with db.begin_nested():
+                result = analyze_local_resource(resource, force=payload.force)
+        except Exception as exc:
+            failures.append({"resource_id": resource_id, "error": str(exc)})
+            continue
+        if result == "analyzed":
+            analyzed_ids.append(resource_id)
+        elif result == "skipped":
+            skipped_ids.append(resource_id)
+        else:
+            missing_ids.append(resource_id)
+    db.commit()
+    return LocalResourceBatchAnalysisResponse(
+        requested_count=len(payload.resource_ids),
+        analyzed_count=len(analyzed_ids),
+        analyzed_resource_ids=analyzed_ids,
+        skipped_resource_ids=skipped_ids,
+        missing_resource_ids=missing_ids,
+        failures=failures,
     )
 
 

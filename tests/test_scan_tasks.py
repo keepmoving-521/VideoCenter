@@ -162,7 +162,7 @@ def test_scan_probes_video_media_information(
         lambda task_id: None,
     )
     monkeypatch.setattr(
-        "videocenter.services.local_library.probe_video_file",
+        "videocenter.services.local_resource_analysis.probe_video_file",
         lambda path: VideoMediaInfo(
             duration_seconds=125.5,
             width=1920,
@@ -196,7 +196,7 @@ def test_scan_probes_video_media_information(
     cover = root / "generated-cover.jpg"
     preview = root / "generated-preview.jpg"
     monkeypatch.setattr(
-        "videocenter.services.local_library.generate_video_artwork",
+        "videocenter.services.local_resource_analysis.generate_video_artwork",
         lambda path, **kwargs: GeneratedVideoArtwork(
             cover_image_path=str(cover),
             preview_thumbnail_paths=(str(preview),),
