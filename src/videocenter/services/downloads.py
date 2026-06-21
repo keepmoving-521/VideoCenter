@@ -325,6 +325,8 @@ def register_local_resource(
     resource.file_name = result.target_path.name
     resource.file_size = result.file_size
     resource.mime_type = result.mime_type or "application/octet-stream"
+    if result.target_path.exists():
+        resource.modified_at_ns = result.target_path.stat().st_mtime_ns
     return resource
 
 

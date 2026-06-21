@@ -1,12 +1,20 @@
-from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import BadRequestError, NotFoundError
 from videocenter.models.media import LocalResource, Media
-from videocenter.schemas.media import LocalResourceRead, LocalScanRequest, LocalScanResult
-from videocenter.services.local_library import scan_local_library
+from videocenter.models.scan import ScanTask
+from videocenter.schemas.media import LocalResourceRead, LocalScanRequest
+from videocenter.schemas.scan import ScanTaskRead
+from videocenter.services.local_library import (
+    create_scan_task,
+    resolve_library_path,
+    start_scan_task,
+)
 
 router = APIRouter()
 
@@ -16,11 +24,39 @@ def list_resources(db: Session = Depends(get_db)):
     return db.scalars(select(LocalResource).order_by(LocalResource.id.desc())).all()
 
 
-@router.post("/scan", response_model=LocalScanResult)
+@router.post(
+    "/scan",
+    response_model=ScanTaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def scan_resources(payload: LocalScanRequest, db: Session = Depends(get_db)):
     if payload.media_id is not None and not db.get(Media, payload.media_id):
         raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
     try:
-        return scan_local_library(db, payload.path, payload.media_id)
+        path = resolve_library_path(payload.path)
     except ValueError as exc:
         raise BadRequestError(str(exc), code="INVALID_SCAN_PATH") from exc
+    task = create_scan_task(
+        db,
+        path=path,
+        media_id=payload.media_id,
+        incremental=payload.incremental,
+    )
+    start_scan_task(task.id)
+    return task
+
+
+@router.get("/scan-tasks", response_model=list[ScanTaskRead])
+def list_scan_tasks(db: Session = Depends(get_db)):
+    return db.scalars(select(ScanTask).order_by(ScanTask.id.desc())).all()
+
+
+@router.get("/scan-tasks/{task_id}", response_model=ScanTaskRead)
+def get_scan_task(
+    task_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(ScanTask, task_id)
+    if task is None:
+        raise NotFoundError("扫描任务不存在", code="SCAN_TASK_NOT_FOUND")
+    return task

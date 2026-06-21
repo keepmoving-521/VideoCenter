@@ -32,6 +32,7 @@ from videocenter.models import (  # noqa: E402, F401
     Media,
     MediaDirectory,
     Notification,
+    ScanTask,
     Season,
     Tag,
     WatchHistory,

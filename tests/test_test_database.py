@@ -16,6 +16,7 @@ EXPECTED_TABLES = {
     "media_directories",
     "media_tags",
     "notifications",
+    "scan_tasks",
     "seasons",
     "tags",
     "watch_history",

@@ -277,6 +277,7 @@ class LocalResourceRead(BaseModel):
     file_size: int
     mime_type: str
     duration_seconds: float | None
+    modified_at_ns: int | None
     created_at: datetime
 
 
@@ -411,6 +412,7 @@ class MediaLibraryStats(BaseModel):
 class LocalScanRequest(ApiRequestModel):
     path: str | None = Field(default=None, min_length=1, max_length=2048)
     media_id: PositiveId | None = None
+    incremental: bool = True
 
     @field_validator("path")
     @classmethod
@@ -418,9 +420,3 @@ class LocalScanRequest(ApiRequestModel):
         if value is not None and "\x00" in value:
             raise ValueError("扫描路径不能包含空字符")
         return value
-
-
-class LocalScanResult(BaseModel):
-    scanned: int
-    added: int
-    updated: int

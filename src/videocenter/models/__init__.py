@@ -11,6 +11,7 @@ from videocenter.models.media import (
 )
 from videocenter.models.media_directory import MediaDirectory
 from videocenter.models.notification import Notification, NotificationType
+from videocenter.models.scan import ScanTask, ScanTaskStatus
 
 __all__ = [
     "DownloadTask",
@@ -23,6 +24,8 @@ __all__ = [
     "Notification",
     "NotificationType",
     "Season",
+    "ScanTask",
+    "ScanTaskStatus",
     "Tag",
     "WatchHistory",
 ]

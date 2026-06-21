@@ -227,6 +227,7 @@ class LocalResource(Base):
     file_size: Mapped[int] = mapped_column(Integer)
     mime_type: Mapped[str] = mapped_column(String(128), default="video/mp4")
     duration_seconds: Mapped[float | None] = mapped_column(Float)
+    modified_at_ns: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     media: Mapped[Media | None] = relationship(back_populates="resources")

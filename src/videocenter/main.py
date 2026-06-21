@@ -11,6 +11,7 @@ from videocenter.core.config import get_settings
 from videocenter.core.logging import configure_logging
 from videocenter.schemas.error import STANDARD_ERROR_RESPONSES
 from videocenter.services.downloads import restore_download_queue
+from videocenter.services.local_library import restore_scan_tasks
 
 settings = get_settings()
 configure_logging(settings)
@@ -26,6 +27,14 @@ async def lifespan(_: FastAPI):
         extra={
             "download_event": "recovery_completed",
             "restored_download_count": restored_downloads,
+        },
+    )
+    restored_scans = restore_scan_tasks()
+    logger.info(
+        "Scan task recovery completed",
+        extra={
+            "scan_event": "recovery_completed",
+            "restored_scan_count": restored_scans,
         },
     )
     logger.info("Application started")
