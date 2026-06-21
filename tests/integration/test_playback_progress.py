@@ -87,3 +87,54 @@ def test_save_playback_progress_returns_not_found_for_unknown_resource(
         status_code=404,
         code="LOCAL_RESOURCE_NOT_FOUND",
     )
+
+
+def test_get_single_media_playback_progress(
+    api_client: TestClient,
+    model_factory,
+):
+    media = model_factory.media()
+    resource = model_factory.local_resource(media=media)
+    history = model_factory.watch_history(
+        media=media,
+        resource=resource,
+        position_seconds=48.5,
+        duration_seconds=120,
+    )
+
+    response = api_client.get(f"/api/v1/history/{media.id}")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": history.id,
+        "media_id": media.id,
+        "resource_id": resource.id,
+        "position_seconds": 48.5,
+        "duration_seconds": 120,
+        "watched_at": history.watched_at.isoformat(),
+    }
+
+
+def test_get_playback_progress_distinguishes_missing_history(
+    api_client: TestClient,
+    api_assertions,
+    model_factory,
+):
+    media = model_factory.media()
+
+    api_assertions.assert_error(
+        api_client.get(f"/api/v1/history/{media.id}"),
+        status_code=404,
+        code="WATCH_HISTORY_NOT_FOUND",
+    )
+
+
+def test_get_playback_progress_returns_not_found_for_unknown_media(
+    api_client: TestClient,
+    api_assertions,
+):
+    api_assertions.assert_error(
+        api_client.get("/api/v1/history/999999"),
+        status_code=404,
+        code="MEDIA_NOT_FOUND",
+    )

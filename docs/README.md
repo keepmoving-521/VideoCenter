@@ -70,5 +70,6 @@
 - [P13～P15：HLS 转码任务、播放列表与分片](hls-transcoding-playback.md)
 - [P16～P18：HLS 转码进度、并发限制与缓存清理](hls-progress-concurrency-cache.md)
 - [H01：保存视频播放进度](playback-progress-saving.md)
+- [H02：查询单个影片播放进度](playback-progress-query.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

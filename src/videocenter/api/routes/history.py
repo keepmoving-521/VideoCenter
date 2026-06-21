@@ -35,6 +35,19 @@ def save_history(payload: HistoryUpsert, db: Session = Depends(get_db)):
     return save_watch_history(db, **payload.model_dump())
 
 
+@router.get("/{media_id}", response_model=HistoryRead)
+def get_history(
+    media_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    if db.get(Media, media_id) is None:
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
+    history = db.scalar(select(WatchHistory).where(WatchHistory.media_id == media_id))
+    if history is None:
+        raise NotFoundError("观看记录不存在", code="WATCH_HISTORY_NOT_FOUND")
+    return history
+
+
 @router.delete("/{media_id}", status_code=204)
 def delete_history(
     media_id: Annotated[int, Path(gt=0)],
