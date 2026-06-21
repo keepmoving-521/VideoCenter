@@ -47,5 +47,6 @@
 - [D16～D19：目标目录、完整性校验、临时文件清理与资源登记](download-destination-integrity-registration.md)
 - [D20～D22：影片状态、下载日志与重启恢复](download-media-status-logging-recovery.md)
 - [D23：yt-dlp 下载器](yt-dlp-downloader.md)
+- [D24～D27：清晰度、格式、字幕与封面](download-quality-format-subtitles-thumbnail.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

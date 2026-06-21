@@ -253,9 +253,13 @@ def normalized_download_source(source_url: str) -> str:
 def select_download_provider(
     source_url: str,
     requested_provider: str = "auto",
+    *,
+    requires_processing: bool = False,
 ) -> str:
     if requested_provider != "auto":
         return requested_provider
+    if requires_processing:
+        return "yt-dlp"
     suffix = Path(urlsplit(source_url).path).suffix.casefold()
     return "http-direct" if suffix in DIRECT_MEDIA_EXTENSIONS else "yt-dlp"
 
@@ -418,6 +422,11 @@ def _run_download(
                 timeout_seconds=30,
                 overwrite=True,
                 expected_sha256=task.expected_sha256,
+                video_quality=task.video_quality,
+                video_format=task.video_format,
+                download_subtitles=task.download_subtitles,
+                subtitle_languages=tuple(task.subtitle_languages),
+                download_thumbnail=task.download_thumbnail,
             )
 
             last_logged_bucket = -1

@@ -186,6 +186,9 @@ python -m pytest
 视频网站和流媒体资源下载请参阅
 [yt-dlp 下载器文档](docs/yt-dlp-downloader.md)。
 
+清晰度、容器格式、字幕语言和封面下载请参阅
+[下载媒体选项文档](docs/download-quality-format-subtitles-thumbnail.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

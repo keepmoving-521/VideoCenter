@@ -40,6 +40,10 @@ class FakeYoutubeDL:
             }
         )
         target.write_bytes(content)
+        if self.options["writesubtitles"]:
+            target.with_suffix(".zh-CN.vtt").write_text("WEBVTT", encoding="utf-8")
+        if self.options["writethumbnail"]:
+            target.with_suffix(".webp").write_bytes(b"thumbnail")
         hook(
             {
                 "status": "finished",
@@ -76,7 +80,12 @@ def test_yt_dlp_downloader_uses_python_api_and_progress_hooks(tmp_path: Path):
     assert result.target_path == target.resolve()
     assert result.file_size == len(b"yt-dlp-content")
     assert result.checksum == hashlib.sha256(b"yt-dlp-content").hexdigest()
-    assert result.extra == {"extractor": "Example", "format_id": "best"}
+    assert result.extra == {
+        "extractor": "Example",
+        "format_id": "best",
+        "subtitle_paths": [],
+        "thumbnail_paths": [],
+    }
     assert [update.state for update in updates] == [
         DownloadProgressState.STARTING,
         DownloadProgressState.DOWNLOADING,
@@ -86,6 +95,41 @@ def test_yt_dlp_downloader_uses_python_api_and_progress_hooks(tmp_path: Path):
     assert FakeYoutubeDL.last_options["outtmpl"].endswith(".%(ext)s")
     assert FakeYoutubeDL.last_options["socket_timeout"] == 15
     assert FakeYoutubeDL.last_options["http_headers"]["Referer"].startswith("https://")
+
+
+def test_yt_dlp_downloader_applies_quality_format_subtitles_and_thumbnail(
+    tmp_path: Path,
+):
+    target = tmp_path / "selected.mp4"
+
+    result = YtDlpDownloader(FakeYoutubeDL).download(
+        DownloadRequest(
+            source_url="https://video.example.com/watch/quality",
+            target_path=target,
+            video_quality="1080p",
+            video_format="mkv",
+            download_subtitles=True,
+            subtitle_languages=("zh-CN", "en"),
+            download_thumbnail=True,
+        )
+    )
+
+    options = FakeYoutubeDL.last_options
+    assert "[height<=1080]" in options["format"]
+    assert options["merge_output_format"] == "mkv"
+    assert options["writesubtitles"] is True
+    assert options["writeautomaticsub"] is False
+    assert options["subtitleslangs"] == ["zh-CN", "en"]
+    assert options["writethumbnail"] is True
+    assert result.extra["subtitle_paths"][0].endswith(".zh-CN.vtt")
+    assert result.extra["thumbnail_paths"][0].endswith(".webp")
+
+
+def test_yt_dlp_format_selector_supports_best_and_container_preferences():
+    assert YtDlpDownloader._format_selector("best", "best") == ("bestvideo*+bestaudio/best")
+    selector = YtDlpDownloader._format_selector("720p", "mp4")
+    assert "[height<=720]" in selector
+    assert "[ext=mp4]" in selector
 
 
 def test_yt_dlp_downloader_verifies_sha256(tmp_path: Path):

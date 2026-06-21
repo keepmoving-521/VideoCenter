@@ -75,7 +75,10 @@ class YtDlpDownloader(Downloader):
                 )
 
         options = {
-            "format": "bestvideo*+bestaudio/best",
+            "format": self._format_selector(
+                request.video_quality,
+                request.video_format,
+            ),
             "outtmpl": output_template,
             "noplaylist": True,
             "overwrites": request.overwrite,
@@ -85,7 +88,14 @@ class YtDlpDownloader(Downloader):
             "http_headers": request.headers,
             "socket_timeout": request.timeout_seconds,
             "progress_hooks": [progress_hook],
+            "writesubtitles": request.download_subtitles,
+            "writeautomaticsub": False,
+            "subtitleslangs": list(request.subtitle_languages) or ["all"],
+            "subtitlesformat": "best",
+            "writethumbnail": request.download_thumbnail,
         }
+        if request.video_format != "best":
+            options["merge_output_format"] = request.video_format
 
         try:
             token.raise_if_cancelled()
@@ -113,16 +123,24 @@ class YtDlpDownloader(Downloader):
                 extra={
                     "extractor": info.get("extractor_key") or info.get("extractor"),
                     "format_id": info.get("format_id"),
+                    "subtitle_paths": self._sidecar_paths(
+                        final_path,
+                        {".srt", ".vtt", ".ass", ".lrc"},
+                    ),
+                    "thumbnail_paths": self._sidecar_paths(
+                        final_path,
+                        {".jpg", ".jpeg", ".png", ".webp"},
+                    ),
                 },
             )
         except DownloadCancelledError:
-            self._cleanup_partial_files(target_path)
+            self._cleanup_output_files(target_path)
             raise
         except DownloadError:
-            self._cleanup_partial_files(target_path)
+            self._cleanup_output_files(target_path)
             raise
         except Exception as exc:
-            self._cleanup_partial_files(target_path)
+            self._cleanup_output_files(target_path)
             if token.is_cancelled:
                 raise DownloadCancelledError() from exc
             raise DownloadError(f"yt-dlp 下载失败：{exc}") from exc
@@ -157,6 +175,26 @@ class YtDlpDownloader(Downloader):
         raise DownloadError("yt-dlp 未生成可用的下载文件")
 
     @staticmethod
+    def _format_selector(video_quality: str, video_format: str) -> str:
+        height = None if video_quality == "best" else int(video_quality.removesuffix("p"))
+        height_filter = "" if height is None else f"[height<={height}]"
+        if video_format == "best":
+            return f"bestvideo*{height_filter}+bestaudio/best{height_filter}"
+        return (
+            f"bestvideo*{height_filter}[ext={video_format}]+bestaudio/"
+            f"best{height_filter}[ext={video_format}]/"
+            f"bestvideo*{height_filter}+bestaudio/best{height_filter}"
+        )
+
+    @staticmethod
+    def _sidecar_paths(final_path: Path, extensions: set[str]) -> list[str]:
+        return sorted(
+            str(path.resolve())
+            for path in final_path.parent.glob(f"{final_path.stem}.*")
+            if path.is_file() and path.suffix.casefold() in extensions
+        )
+
+    @staticmethod
     def _sha256(path: Path) -> str:
         checksum = hashlib.sha256()
         with path.open("rb") as file:
@@ -165,9 +203,9 @@ class YtDlpDownloader(Downloader):
         return checksum.hexdigest()
 
     @staticmethod
-    def _cleanup_partial_files(target_path: Path) -> None:
+    def _cleanup_output_files(target_path: Path) -> None:
         for path in target_path.parent.glob(f"{target_path.stem}.*"):
-            if path.suffix in {".part", ".ytdl"} or path.name.endswith((".part", ".ytdl")):
+            if path.is_file():
                 path.unlink(missing_ok=True)
 
     @staticmethod

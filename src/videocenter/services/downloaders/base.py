@@ -48,6 +48,11 @@ class DownloadRequest(DownloaderDataModel):
         max_length=64,
         pattern=r"^[0-9a-fA-F]{64}$",
     )
+    video_quality: str = Field(default="best", max_length=20)
+    video_format: str = Field(default="best", max_length=20)
+    download_subtitles: bool = False
+    subtitle_languages: tuple[str, ...] = ()
+    download_thumbnail: bool = False
 
     @field_validator("source_url")
     @classmethod

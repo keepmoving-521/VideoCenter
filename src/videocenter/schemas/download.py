@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 from videocenter.models.download import DownloadStatus
 from videocenter.schemas.common import ApiRequestModel, PositiveId
@@ -14,6 +14,23 @@ class DownloadProvider(StrEnum):
     AUTO = "auto"
     HTTP_DIRECT = "http-direct"
     YT_DLP = "yt-dlp"
+
+
+class VideoQuality(StrEnum):
+    BEST = "best"
+    UHD_2160P = "2160p"
+    QHD_1440P = "1440p"
+    FULL_HD_1080P = "1080p"
+    HD_720P = "720p"
+    SD_480P = "480p"
+    LOW_360P = "360p"
+
+
+class VideoFormat(StrEnum):
+    BEST = "best"
+    MP4 = "mp4"
+    MKV = "mkv"
+    WEBM = "webm"
 
 
 class DownloadCreate(ApiRequestModel):
@@ -29,6 +46,11 @@ class DownloadCreate(ApiRequestModel):
     media_id: PositiveId | None = None
     priority: int = Field(default=0, ge=-100, le=100)
     downloader: DownloadProvider = DownloadProvider.AUTO
+    video_quality: VideoQuality = VideoQuality.BEST
+    video_format: VideoFormat = VideoFormat.BEST
+    download_subtitles: bool = False
+    subtitle_languages: list[str] = Field(default_factory=list, max_length=20)
+    download_thumbnail: bool = False
 
     @field_validator("target_name")
     @classmethod
@@ -57,6 +79,27 @@ class DownloadCreate(ApiRequestModel):
     def normalize_expected_sha256(cls, value: str | None) -> str | None:
         return value.casefold() if value is not None else None
 
+    @field_validator("subtitle_languages")
+    @classmethod
+    def normalize_subtitle_languages(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for language in value:
+            item = language.strip()
+            if not item or len(item) > 50:
+                raise ValueError("字幕语言不能为空且长度不能超过 50")
+            key = item.casefold()
+            if key not in seen:
+                seen.add(key)
+                normalized.append(item)
+        return normalized
+
+    @model_validator(mode="after")
+    def enable_subtitles_when_languages_selected(self) -> "DownloadCreate":
+        if self.subtitle_languages:
+            self.download_subtitles = True
+        return self
+
 
 class DownloadRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -68,6 +111,11 @@ class DownloadRead(BaseModel):
     target_directory: str
     target_path: str | None
     downloader_name: str
+    video_quality: str
+    video_format: str
+    download_subtitles: bool
+    subtitle_languages: list[str]
+    download_thumbnail: bool
     expected_sha256: str | None
     checksum_sha256: str | None
     status: DownloadStatus

@@ -37,7 +37,16 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
     if payload.media_id is not None and media is None:
         raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
     source_url = normalized_download_source(str(payload.source_url))
-    downloader_name = select_download_provider(source_url, payload.downloader.value)
+    downloader_name = select_download_provider(
+        source_url,
+        payload.downloader.value,
+        requires_processing=(
+            payload.video_quality.value != "best"
+            or payload.video_format.value != "best"
+            or payload.download_subtitles
+            or payload.download_thumbnail
+        ),
+    )
     duplicate = db.scalar(
         select(DownloadTask)
         .where(
@@ -79,6 +88,11 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
         target_name=target_name,
         target_directory=target_directory,
         downloader_name=downloader_name,
+        video_quality=payload.video_quality.value,
+        video_format=payload.video_format.value,
+        download_subtitles=payload.download_subtitles,
+        subtitle_languages=payload.subtitle_languages,
+        download_thumbnail=payload.download_thumbnail,
         expected_sha256=payload.expected_sha256,
         priority=payload.priority,
     )

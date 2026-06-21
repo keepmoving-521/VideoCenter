@@ -305,6 +305,17 @@ def test_download_provider_selection(source_url, requested, expected):
     assert select_download_provider(source_url, requested) == expected
 
 
+def test_advanced_media_options_force_yt_dlp_in_auto_mode():
+    assert (
+        select_download_provider(
+            "https://cdn.example.com/video.mp4",
+            "auto",
+            requires_processing=True,
+        )
+        == "yt-dlp"
+    )
+
+
 @pytest.mark.parametrize(
     ("source_url", "requested", "expected"),
     [
@@ -332,6 +343,36 @@ def test_create_download_persists_selected_provider(
 
     assert response.status_code == 202
     assert response.json()["downloader_name"] == expected
+
+
+def test_create_download_persists_media_selection_options(
+    api_client: TestClient,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "videocenter.api.routes.downloads.start_download",
+        lambda task_id, *, priority=0: None,
+    )
+
+    response = api_client.post(
+        "/api/v1/downloads",
+        json={
+            "source_url": "https://cdn.example.com/video.mp4",
+            "video_quality": "1080p",
+            "video_format": "mkv",
+            "subtitle_languages": ["zh-CN", "en", "ZH-cn"],
+            "download_thumbnail": True,
+        },
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["downloader_name"] == "yt-dlp"
+    assert payload["video_quality"] == "1080p"
+    assert payload["video_format"] == "mkv"
+    assert payload["download_subtitles"] is True
+    assert payload["subtitle_languages"] == ["zh-CN", "en"]
+    assert payload["download_thumbnail"] is True
 
 
 def test_duplicate_download_is_rejected_but_cancelled_task_can_be_recreated(

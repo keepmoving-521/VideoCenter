@@ -2,6 +2,8 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import (
+    JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -66,6 +68,31 @@ class DownloadTask(Base):
         String(50),
         default="auto",
         server_default="auto",
+    )
+    video_quality: Mapped[str] = mapped_column(
+        String(20),
+        default="best",
+        server_default="best",
+    )
+    video_format: Mapped[str] = mapped_column(
+        String(20),
+        default="best",
+        server_default="best",
+    )
+    download_subtitles: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="0",
+    )
+    subtitle_languages: Mapped[list[str]] = mapped_column(
+        JSON,
+        default=list,
+        server_default="[]",
+    )
+    download_thumbnail: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="0",
     )
     expected_sha256: Mapped[str | None] = mapped_column(String(64))
     checksum_sha256: Mapped[str | None] = mapped_column(String(64))
