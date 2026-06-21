@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     ffmpeg_path: str | None = None
     ffprobe_path: str | None = None
     download_worker_count: int = 1
+    hls_worker_count: int = 1
+    hls_cache_retention_hours: int = 168
     parser_timeout_seconds: float = 30
     parser_max_attempts: int = 3
     parser_retry_delay_seconds: float = 0.5
@@ -128,6 +130,20 @@ class Settings(BaseSettings):
     def validate_download_worker_count(cls, value: int) -> int:
         if value < 1 or value > 16:
             raise ValueError("Download worker count must be between 1 and 16")
+        return value
+
+    @field_validator("hls_worker_count")
+    @classmethod
+    def validate_hls_worker_count(cls, value: int) -> int:
+        if value < 1 or value > 8:
+            raise ValueError("HLS worker count must be between 1 and 8")
+        return value
+
+    @field_validator("hls_cache_retention_hours")
+    @classmethod
+    def validate_hls_cache_retention_hours(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("HLS cache retention hours cannot be negative")
         return value
 
     @model_validator(mode="after")

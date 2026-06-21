@@ -25,6 +25,9 @@ GET /api/v1/stream/hls-tasks/{task_id}
 
 任务完成后响应包含 `playlist_url`。
 
+实时进度、并发限制和缓存清理详见
+[HLS 转码进度、并发限制与缓存清理](hls-progress-concurrency-cache.md)。
+
 ## 转码格式
 
 - 视频：H.264；

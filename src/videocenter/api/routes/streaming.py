@@ -13,7 +13,11 @@ from videocenter.core.database import get_db
 from videocenter.core.exceptions import AppException, NotFoundError
 from videocenter.models.hls import HlsTask
 from videocenter.models.media import LocalResource
-from videocenter.schemas.hls import HlsTaskRead
+from videocenter.schemas.hls import (
+    HlsCacheCleanupRequest,
+    HlsCacheCleanupResult,
+    HlsTaskRead,
+)
 from videocenter.schemas.streaming import (
     PlaybackAudioTrackList,
     PlaybackBrowserCompatibility,
@@ -24,6 +28,7 @@ from videocenter.schemas.streaming import (
 )
 from videocenter.services.downloads import update_media_download_status
 from videocenter.services.hls import (
+    cleanup_hls_cache,
     create_or_reuse_hls_task,
     hls_playlist_path,
     hls_segment_path,
@@ -78,6 +83,23 @@ def get_hls_task(
     if task is None:
         raise NotFoundError("HLS 转码任务不存在", code="HLS_TASK_NOT_FOUND")
     return HlsTaskRead.from_task(task)
+
+
+@router.post("/hls/cache/cleanup", response_model=HlsCacheCleanupResult)
+def cleanup_hls_transcoding_cache(
+    payload: HlsCacheCleanupRequest,
+    db: Session = Depends(get_db),
+):
+    task_ids, directory_count, reclaimed_bytes = cleanup_hls_cache(
+        db,
+        max_age_hours=payload.max_age_hours,
+    )
+    return HlsCacheCleanupResult(
+        cleaned_task_count=len(task_ids),
+        cleaned_task_ids=task_ids,
+        removed_directory_count=directory_count,
+        reclaimed_bytes=reclaimed_bytes,
+    )
 
 
 @router.get("/hls/{task_id}/index.m3u8")

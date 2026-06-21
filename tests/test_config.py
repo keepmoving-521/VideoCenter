@@ -101,10 +101,27 @@ def test_ffmpeg_and_ffprobe_paths_are_configurable():
     assert settings.ffprobe_path == "C:/media tools/ffprobe.exe"
 
 
+def test_hls_worker_and_cache_settings_are_configurable():
+    settings = Settings(
+        hls_worker_count=3,
+        hls_cache_retention_hours=48,
+        _env_file=None,
+    )
+
+    assert settings.hls_worker_count == 3
+    assert settings.hls_cache_retention_hours == 48
+
+
 @pytest.mark.parametrize("worker_count", [0, 17])
 def test_invalid_download_worker_count_is_rejected(worker_count):
     with pytest.raises(ValidationError):
         Settings(download_worker_count=worker_count, _env_file=None)
+
+
+@pytest.mark.parametrize("worker_count", [0, 9])
+def test_invalid_hls_worker_count_is_rejected(worker_count):
+    with pytest.raises(ValidationError):
+        Settings(hls_worker_count=worker_count, _env_file=None)
 
 
 @pytest.mark.parametrize(

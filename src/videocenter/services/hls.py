@@ -1,8 +1,10 @@
 import logging
+import queue
 import shutil
 import subprocess
 import threading
-from datetime import datetime
+from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import select, update
@@ -18,8 +20,72 @@ from videocenter.services.media_artwork import MEDIA_CACHE_DIRECTORY_NAME
 logger = logging.getLogger(__name__)
 HLS_SEGMENT_SECONDS = 6
 HLS_TIMEOUT_SECONDS = 24 * 60 * 60
-_hls_threads: dict[int, threading.Thread] = {}
 _hls_lock = threading.Lock()
+_hls_queue: "HlsTaskQueue | None" = None
+
+
+class HlsTaskQueue:
+    def __init__(self, runner: Callable[[int], None], *, worker_count: int) -> None:
+        if worker_count < 1:
+            raise ValueError("worker_count must be greater than zero")
+        self._runner = runner
+        self._queue: queue.Queue[int | None] = queue.Queue()
+        self._queued_ids: set[int] = set()
+        self._running_ids: set[int] = set()
+        self._lock = threading.Lock()
+        self._workers = [
+            threading.Thread(
+                target=self._worker,
+                name=f"videocenter-hls-worker-{index + 1}",
+                daemon=True,
+            )
+            for index in range(worker_count)
+        ]
+        for worker in self._workers:
+            worker.start()
+
+    def enqueue(self, task_id: int) -> bool:
+        with self._lock:
+            if task_id in self._queued_ids or task_id in self._running_ids:
+                return False
+            self._queued_ids.add(task_id)
+        self._queue.put(task_id)
+        return True
+
+    @property
+    def running_count(self) -> int:
+        with self._lock:
+            return len(self._running_ids)
+
+    @property
+    def waiting_count(self) -> int:
+        with self._lock:
+            return len(self._queued_ids)
+
+    def join(self) -> None:
+        self._queue.join()
+
+    def shutdown(self) -> None:
+        for _ in self._workers:
+            self._queue.put(None)
+        for worker in self._workers:
+            worker.join(timeout=5)
+
+    def _worker(self) -> None:
+        while True:
+            task_id = self._queue.get()
+            try:
+                if task_id is None:
+                    return
+                with self._lock:
+                    self._queued_ids.discard(task_id)
+                    self._running_ids.add(task_id)
+                self._runner(task_id)
+            finally:
+                if task_id is not None:
+                    with self._lock:
+                        self._running_ids.discard(task_id)
+                self._queue.task_done()
 
 
 def create_or_reuse_hls_task(db: Session, resource: LocalResource) -> HlsTask:
@@ -49,17 +115,18 @@ def create_or_reuse_hls_task(db: Session, resource: LocalResource) -> HlsTask:
 
 
 def start_hls_task(task_id: int) -> None:
+    get_hls_queue().enqueue(task_id)
+
+
+def get_hls_queue() -> HlsTaskQueue:
+    global _hls_queue
     with _hls_lock:
-        if task_id in _hls_threads:
-            return
-        thread = threading.Thread(
-            target=run_hls_task,
-            args=(task_id,),
-            name=f"videocenter-hls-{task_id}",
-            daemon=True,
-        )
-        _hls_threads[task_id] = thread
-    thread.start()
+        if _hls_queue is None:
+            _hls_queue = HlsTaskQueue(
+                run_hls_task,
+                worker_count=get_settings().hls_worker_count,
+            )
+        return _hls_queue
 
 
 def run_hls_task(task_id: int) -> None:
@@ -89,50 +156,56 @@ def run_hls_task(task_id: int) -> None:
             task.error_message = None
             db.commit()
 
-            result = subprocess.run(
-                [
-                    executable,
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-i",
-                    resource.file_path,
-                    "-map",
-                    "0:v:0",
-                    "-map",
-                    "0:a:0?",
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    "veryfast",
-                    "-crf",
-                    "23",
-                    "-c:a",
-                    "aac",
-                    "-b:a",
-                    "128k",
-                    "-f",
-                    "hls",
-                    "-hls_time",
-                    str(HLS_SEGMENT_SECONDS),
-                    "-hls_playlist_type",
-                    "vod",
-                    "-hls_flags",
-                    "independent_segments",
-                    "-hls_segment_filename",
-                    str(segments_directory / "segment%05d.ts"),
-                    "-y",
-                    str(playlist_path),
-                ],
-                capture_output=True,
+            command = [
+                executable,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                resource.file_path,
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0?",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-f",
+                "hls",
+                "-hls_time",
+                str(HLS_SEGMENT_SECONDS),
+                "-hls_playlist_type",
+                "vod",
+                "-hls_flags",
+                "independent_segments",
+                "-hls_segment_filename",
+                str(segments_directory / "segment%05d.ts"),
+                "-progress",
+                "pipe:1",
+                "-nostats",
+                "-y",
+                str(playlist_path),
+            ]
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=HLS_TIMEOUT_SECONDS,
-                check=False,
             )
-            if result.returncode != 0 or not playlist_path.is_file():
-                raise RuntimeError(result.stderr.strip() or "FFmpeg 未生成 HLS 播放列表")
+            _consume_ffmpeg_progress(db, task, process, resource.duration_seconds)
+            stderr = process.stderr.read() if process.stderr else ""
+            return_code = process.wait(timeout=HLS_TIMEOUT_SECONDS)
+            if return_code != 0 or not playlist_path.is_file():
+                raise RuntimeError(stderr.strip() or "FFmpeg 未生成 HLS 播放列表")
             task.status = HlsTaskStatus.COMPLETED
             task.progress = 100
             task.completed_at = datetime.now()
@@ -146,9 +219,6 @@ def run_hls_task(task_id: int) -> None:
                 task.completed_at = datetime.now()
                 db.commit()
         logger.exception("HLS transcoding failed", extra={"hls_task_id": task_id})
-    finally:
-        with _hls_lock:
-            _hls_threads.pop(task_id, None)
 
 
 def restore_hls_tasks() -> int:
@@ -171,6 +241,38 @@ def restore_hls_tasks() -> int:
     for task_id in task_ids:
         start_hls_task(task_id)
     return result.rowcount or 0
+
+
+def cleanup_hls_cache(
+    db: Session,
+    *,
+    max_age_hours: int | None = None,
+) -> tuple[list[int], int, int]:
+    retention = get_settings().hls_cache_retention_hours if max_age_hours is None else max_age_hours
+    cutoff = datetime.now() - timedelta(hours=retention)
+    tasks = db.scalars(
+        select(HlsTask).where(
+            HlsTask.status.in_([HlsTaskStatus.COMPLETED, HlsTaskStatus.FAILED]),
+            HlsTask.completed_at.is_not(None),
+            HlsTask.completed_at <= cutoff,
+        )
+    ).all()
+    cleaned_ids: list[int] = []
+    removed_directories = 0
+    reclaimed_bytes = 0
+    for task in tasks:
+        if task.output_directory:
+            directory = Path(task.output_directory).resolve()
+            _ensure_hls_cache_path(directory)
+            if directory.is_dir():
+                reclaimed_bytes += _directory_size(directory)
+                shutil.rmtree(directory)
+                removed_directories += 1
+        task.output_directory = None
+        task.playlist_path = None
+        cleaned_ids.append(task.id)
+    db.commit()
+    return cleaned_ids, removed_directories, reclaimed_bytes
 
 
 def hls_playlist_path(task: HlsTask) -> Path:
@@ -218,3 +320,43 @@ def _ensure_hls_cache_path(path: Path) -> None:
 
 def _task_files_exist(task: HlsTask) -> bool:
     return bool(task.playlist_path and Path(task.playlist_path).is_file())
+
+
+def _consume_ffmpeg_progress(
+    db: Session,
+    task: HlsTask,
+    process: subprocess.Popen,
+    duration_seconds: float | None,
+) -> None:
+    if process.stdout is None:
+        return
+    last_progress = task.progress
+    for raw_line in process.stdout:
+        key, separator, value = raw_line.strip().partition("=")
+        if not separator or key not in {"out_time_us", "out_time_ms"}:
+            continue
+        try:
+            elapsed_seconds = int(value) / 1_000_000
+        except ValueError:
+            continue
+        if duration_seconds and duration_seconds > 0:
+            progress = min(round(elapsed_seconds / duration_seconds * 100, 2), 99)
+        else:
+            progress = min(last_progress + 1, 99)
+        if progress <= last_progress:
+            continue
+        task.progress = progress
+        last_progress = progress
+        db.commit()
+
+
+def _directory_size(directory: Path) -> int:
+    total = 0
+    for path in directory.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            total += path.stat().st_size
+        except OSError:
+            continue
+    return total

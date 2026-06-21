@@ -68,5 +68,6 @@
 - [P06～P09：字幕列表、外挂字幕访问与 WebVTT 转换](playback-subtitles-webvtt.md)
 - [P10～P12：音轨、清晰度与浏览器格式兼容性](playback-audio-quality-browser-support.md)
 - [P13～P15：HLS 转码任务、播放列表与分片](hls-transcoding-playback.md)
+- [P16～P18：HLS 转码进度、并发限制与缓存清理](hls-progress-concurrency-cache.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。
