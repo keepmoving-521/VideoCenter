@@ -231,6 +231,17 @@ class LocalResource(Base):
     video_height: Mapped[int | None] = mapped_column(Integer)
     video_codec: Mapped[str | None] = mapped_column(String(100))
     bitrate: Mapped[int | None] = mapped_column(Integer)
+    audio_codec: Mapped[str | None] = mapped_column(String(100))
+    audio_tracks: Mapped[list[dict]] = mapped_column(
+        JSON,
+        default=list,
+        server_default="[]",
+    )
+    embedded_subtitles: Mapped[list[dict]] = mapped_column(
+        JSON,
+        default=list,
+        server_default="[]",
+    )
     media_info_probed: Mapped[bool] = mapped_column(
         Boolean,
         default=False,

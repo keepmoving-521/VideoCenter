@@ -12,12 +12,36 @@ MEDIA_PROBE_TIMEOUT_SECONDS = 30
 
 
 @dataclass(frozen=True, slots=True)
+class AudioTrackInfo:
+    stream_index: int
+    codec: str | None
+    language: str | None
+    title: str | None
+    channels: int | None
+    channel_layout: str | None
+    is_default: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SubtitleTrackInfo:
+    stream_index: int
+    codec: str | None
+    language: str | None
+    title: str | None
+    is_default: bool
+    is_forced: bool
+
+
+@dataclass(frozen=True, slots=True)
 class VideoMediaInfo:
     duration_seconds: float | None
     width: int | None
     height: int | None
     video_codec: str | None
     bitrate: int | None
+    audio_codec: str | None = None
+    audio_tracks: tuple[AudioTrackInfo, ...] = ()
+    subtitle_tracks: tuple[SubtitleTrackInfo, ...] = ()
 
 
 def probe_video_file(
@@ -33,10 +57,8 @@ def probe_video_file(
                 executable,
                 "-v",
                 "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "format=duration,bit_rate:stream=codec_name,width,height,duration,bit_rate",
+                "-show_streams",
+                "-show_format",
                 "-of",
                 "json",
                 str(path),
@@ -64,20 +86,31 @@ def probe_video_file(
         logger.warning("FFprobe returned invalid JSON for %s", path)
         return None
 
-    stream = next(iter(payload.get("streams") or []), {})
+    streams = payload.get("streams") or []
+    video_stream = next(
+        (stream for stream in streams if stream.get("codec_type") == "video"),
+        next(iter(streams), {}),
+    )
+    audio_streams = [stream for stream in streams if stream.get("codec_type") == "audio"]
+    subtitle_streams = [stream for stream in streams if stream.get("codec_type") == "subtitle"]
     format_info = payload.get("format") or {}
+    audio_tracks = tuple(_audio_track(stream) for stream in audio_streams)
+    subtitle_tracks = tuple(_subtitle_track(stream) for stream in subtitle_streams)
     return VideoMediaInfo(
         duration_seconds=_first_positive_float(
             format_info.get("duration"),
-            stream.get("duration"),
+            video_stream.get("duration"),
         ),
-        width=_positive_int(stream.get("width")),
-        height=_positive_int(stream.get("height")),
-        video_codec=_clean_text(stream.get("codec_name")),
+        width=_positive_int(video_stream.get("width")),
+        height=_positive_int(video_stream.get("height")),
+        video_codec=_clean_text(video_stream.get("codec_name")),
         bitrate=_first_positive_int(
-            stream.get("bit_rate"),
+            video_stream.get("bit_rate"),
             format_info.get("bit_rate"),
         ),
+        audio_codec=audio_tracks[0].codec if audio_tracks else None,
+        audio_tracks=audio_tracks,
+        subtitle_tracks=subtitle_tracks,
     )
 
 
@@ -126,3 +159,37 @@ def _clean_text(value) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _audio_track(stream: dict) -> AudioTrackInfo:
+    tags = stream.get("tags") or {}
+    disposition = stream.get("disposition") or {}
+    return AudioTrackInfo(
+        stream_index=_stream_index(stream),
+        codec=_clean_text(stream.get("codec_name")),
+        language=_clean_text(tags.get("language")),
+        title=_clean_text(tags.get("title")),
+        channels=_positive_int(stream.get("channels")),
+        channel_layout=_clean_text(stream.get("channel_layout")),
+        is_default=bool(disposition.get("default")),
+    )
+
+
+def _subtitle_track(stream: dict) -> SubtitleTrackInfo:
+    tags = stream.get("tags") or {}
+    disposition = stream.get("disposition") or {}
+    return SubtitleTrackInfo(
+        stream_index=_stream_index(stream),
+        codec=_clean_text(stream.get("codec_name")),
+        language=_clean_text(tags.get("language")),
+        title=_clean_text(tags.get("title")),
+        is_default=bool(disposition.get("default")),
+        is_forced=bool(disposition.get("forced")),
+    )
+
+
+def _stream_index(stream: dict) -> int:
+    try:
+        return int(stream.get("index", 0))
+    except (TypeError, ValueError):
+        return 0

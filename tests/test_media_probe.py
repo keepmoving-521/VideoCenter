@@ -45,6 +45,86 @@ def test_probe_video_file_extracts_media_information(tmp_path, monkeypatch):
     assert info.bitrate == 12000000
 
 
+def test_probe_video_file_extracts_audio_tracks_and_embedded_subtitles(
+    tmp_path,
+    monkeypatch,
+):
+    video = tmp_path / "multilingual.mkv"
+    video.write_bytes(b"video")
+    monkeypatch.setattr(
+        "videocenter.services.media_probe.resolve_ffprobe_executable",
+        lambda settings=None: "ffprobe",
+    )
+    payload = {
+        "streams": [
+            {
+                "index": 0,
+                "codec_type": "video",
+                "codec_name": "hevc",
+                "width": 1920,
+                "height": 1080,
+            },
+            {
+                "index": 1,
+                "codec_type": "audio",
+                "codec_name": "aac",
+                "channels": 2,
+                "channel_layout": "stereo",
+                "tags": {"language": "chi", "title": "中文"},
+                "disposition": {"default": 1},
+            },
+            {
+                "index": 2,
+                "codec_type": "audio",
+                "codec_name": "eac3",
+                "channels": 6,
+                "channel_layout": "5.1(side)",
+                "tags": {"language": "eng"},
+                "disposition": {"default": 0},
+            },
+            {
+                "index": 3,
+                "codec_type": "subtitle",
+                "codec_name": "ass",
+                "tags": {"language": "chi", "title": "简体中文"},
+                "disposition": {"default": 1, "forced": 0},
+            },
+            {
+                "index": 4,
+                "codec_type": "subtitle",
+                "codec_name": "subrip",
+                "tags": {"language": "eng"},
+                "disposition": {"default": 0, "forced": 1},
+            },
+        ],
+        "format": {"duration": "120"},
+    }
+    monkeypatch.setattr(
+        "videocenter.services.media_probe.subprocess.run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(payload),
+            stderr="",
+        ),
+    )
+
+    info = probe_video_file(video)
+
+    assert info.audio_codec == "aac"
+    assert len(info.audio_tracks) == 2
+    assert info.audio_tracks[0].channels == 2
+    assert info.audio_tracks[0].channel_layout == "stereo"
+    assert info.audio_tracks[0].language == "chi"
+    assert info.audio_tracks[0].is_default is True
+    assert info.audio_tracks[1].codec == "eac3"
+    assert info.audio_tracks[1].channels == 6
+    assert len(info.subtitle_tracks) == 2
+    assert info.subtitle_tracks[0].title == "简体中文"
+    assert info.subtitle_tracks[0].is_default is True
+    assert info.subtitle_tracks[1].is_forced is True
+
+
 def test_probe_video_file_uses_format_bitrate_and_stream_duration(
     tmp_path,
     monkeypatch,

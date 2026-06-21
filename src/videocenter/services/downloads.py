@@ -3,6 +3,7 @@ import logging
 import re
 import threading
 import time
+from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -348,6 +349,13 @@ def register_local_resource(
         resource.video_height = media_info.height if media_info else None
         resource.video_codec = media_info.video_codec if media_info else None
         resource.bitrate = media_info.bitrate if media_info else None
+        resource.audio_codec = media_info.audio_codec if media_info else None
+        resource.audio_tracks = (
+            [asdict(track) for track in media_info.audio_tracks] if media_info else []
+        )
+        resource.embedded_subtitles = (
+            [asdict(track) for track in media_info.subtitle_tracks] if media_info else []
+        )
     return resource
 
 

@@ -268,6 +268,25 @@ class MediaUpdate(ApiRequestModel):
         return values
 
 
+class AudioTrackRead(BaseModel):
+    stream_index: int
+    codec: str | None
+    language: str | None
+    title: str | None
+    channels: int | None
+    channel_layout: str | None
+    is_default: bool
+
+
+class EmbeddedSubtitleRead(BaseModel):
+    stream_index: int
+    codec: str | None
+    language: str | None
+    title: str | None
+    is_default: bool
+    is_forced: bool
+
+
 class LocalResourceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -281,6 +300,9 @@ class LocalResourceRead(BaseModel):
     video_height: int | None
     video_codec: str | None
     bitrate: int | None
+    audio_codec: str | None
+    audio_tracks: list[AudioTrackRead]
+    embedded_subtitles: list[EmbeddedSubtitleRead]
     modified_at_ns: int | None
     checksum_sha256: str | None
     detected_media_type: MediaType | None

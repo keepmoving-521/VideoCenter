@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 from videocenter.models.media import LocalResource, MediaStatus
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 from videocenter.services.local_library import restore_scan_tasks, run_scan_task
-from videocenter.services.media_probe import VideoMediaInfo
+from videocenter.services.media_probe import (
+    AudioTrackInfo,
+    SubtitleTrackInfo,
+    VideoMediaInfo,
+)
 
 
 def test_scan_task_runs_in_background_and_reports_progress(
@@ -164,6 +168,28 @@ def test_scan_probes_video_media_information(
             height=1080,
             video_codec="h264",
             bitrate=8_000_000,
+            audio_codec="aac",
+            audio_tracks=(
+                AudioTrackInfo(
+                    stream_index=1,
+                    codec="aac",
+                    language="chi",
+                    title="中文",
+                    channels=2,
+                    channel_layout="stereo",
+                    is_default=True,
+                ),
+            ),
+            subtitle_tracks=(
+                SubtitleTrackInfo(
+                    stream_index=2,
+                    codec="ass",
+                    language="chi",
+                    title="简体中文",
+                    is_default=True,
+                    is_forced=False,
+                ),
+            ),
         ),
     )
 
@@ -180,6 +206,11 @@ def test_scan_probes_video_media_information(
         assert resource["video_height"] == 1080
         assert resource["video_codec"] == "h264"
         assert resource["bitrate"] == 8_000_000
+        assert resource["audio_codec"] == "aac"
+        assert resource["audio_tracks"][0]["channels"] == 2
+        assert resource["audio_tracks"][0]["channel_layout"] == "stereo"
+        assert resource["embedded_subtitles"][0]["codec"] == "ass"
+        assert resource["embedded_subtitles"][0]["language"] == "chi"
         assert db_session.query(LocalResource).one().media_info_probed is True
     finally:
         video.unlink(missing_ok=True)
