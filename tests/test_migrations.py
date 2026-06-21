@@ -10,6 +10,7 @@ from videocenter.core.config import get_settings
 EXPECTED_TABLES = {
     "alembic_version",
     "analysis_tasks",
+    "background_tasks",
     "download_tasks",
     "episodes",
     "hls_tasks",

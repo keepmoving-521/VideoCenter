@@ -1,4 +1,9 @@
 from videocenter.models.analysis import AnalysisTask, AnalysisTaskStatus
+from videocenter.models.background_task import (
+    BackgroundTask,
+    BackgroundTaskStatus,
+    BackgroundTaskType,
+)
 from videocenter.models.download import DownloadTask
 from videocenter.models.history import WatchDailyStat, WatchHistory
 from videocenter.models.hls import HlsTask, HlsTaskStatus
@@ -18,6 +23,9 @@ from videocenter.models.scan import ScanTask, ScanTaskStatus
 __all__ = [
     "AnalysisTask",
     "AnalysisTaskStatus",
+    "BackgroundTask",
+    "BackgroundTaskStatus",
+    "BackgroundTaskType",
     "DownloadTask",
     "Episode",
     "HlsTask",
