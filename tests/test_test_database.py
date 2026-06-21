@@ -21,6 +21,7 @@ EXPECTED_TABLES = {
     "scan_tasks",
     "seasons",
     "tags",
+    "watch_daily_stats",
     "watch_history",
 }
 

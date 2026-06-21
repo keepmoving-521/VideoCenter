@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -33,6 +33,7 @@ class PlaybackProgressUpdate(ApiRequestModel):
     episode_id: PositiveId | None = None
     position_seconds: float = Field(ge=0)
     duration_seconds: float | None = Field(default=None, gt=0)
+    watched_seconds: float | None = Field(default=None, ge=0, le=86_400)
 
     @model_validator(mode="after")
     def validate_playback_position(self) -> "PlaybackProgressUpdate":
@@ -112,3 +113,27 @@ class HistoryBatchDeleteResponse(BaseModel):
 
 class HistoryClearResponse(BaseModel):
     deleted_count: int
+
+
+class WatchStatsSummary(BaseModel):
+    total_watched_seconds: float
+    total_watched_minutes: float
+    total_watched_hours: float
+    watched_media_count: int
+    active_days: int
+    average_daily_seconds: float
+    completed_count: int
+
+
+class DailyWatchStatRead(BaseModel):
+    date: date
+    watched_seconds: float
+    watched_minutes: float
+    watched_media_count: int
+    completed_count: int
+
+
+class DailyWatchStatsResponse(BaseModel):
+    start_date: date
+    end_date: date
+    items: list[DailyWatchStatRead]

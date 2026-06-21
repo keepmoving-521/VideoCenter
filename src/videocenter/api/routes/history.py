@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import BadRequestError, NotFoundError
-from videocenter.models.history import WatchHistory
+from videocenter.models.history import WatchDailyStat, WatchHistory
 from videocenter.models.media import Episode, LocalResource, Media, Season
 from videocenter.schemas.history import (
+    DailyWatchStatRead,
+    DailyWatchStatsResponse,
     HistoryBatchDeleteRequest,
     HistoryBatchDeleteResponse,
     HistoryClearResponse,
@@ -20,6 +22,7 @@ from videocenter.schemas.history import (
     HistoryUpsert,
     NextEpisodeRead,
     WatchedEpisodeRead,
+    WatchStatsSummary,
 )
 from videocenter.services.watch_history import save_watch_history
 
@@ -145,6 +148,93 @@ def list_recently_watched(
     )
 
 
+@router.get("/stats/summary", response_model=WatchStatsSummary)
+def get_watch_stats_summary(db: Session = Depends(get_db)):
+    total_seconds, watched_media_count, active_days, completed_count = db.execute(
+        select(
+            func.coalesce(func.sum(WatchDailyStat.watched_seconds), 0),
+            func.count(func.distinct(WatchDailyStat.media_id)),
+            func.count(func.distinct(WatchDailyStat.stat_date)),
+            func.coalesce(func.sum(WatchDailyStat.completion_count), 0),
+        )
+    ).one()
+    total_seconds = float(total_seconds)
+    active_days = int(active_days)
+    return WatchStatsSummary(
+        total_watched_seconds=total_seconds,
+        total_watched_minutes=round(total_seconds / 60, 2),
+        total_watched_hours=round(total_seconds / 3600, 2),
+        watched_media_count=int(watched_media_count),
+        active_days=active_days,
+        average_daily_seconds=round(total_seconds / active_days, 2) if active_days else 0,
+        completed_count=int(completed_count),
+    )
+
+
+@router.get("/stats/daily", response_model=DailyWatchStatsResponse)
+def get_daily_watch_stats(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    resolved_end = end_date or date.today()
+    resolved_start = start_date or (resolved_end - timedelta(days=29))
+    if resolved_start > resolved_end:
+        raise BadRequestError(
+            "开始日期不能晚于结束日期",
+            code="INVALID_WATCH_STATS_DATE_RANGE",
+        )
+    if (resolved_end - resolved_start).days >= 366:
+        raise BadRequestError(
+            "每日观看统计最多查询 366 天",
+            code="WATCH_STATS_RANGE_TOO_LARGE",
+        )
+    rows = db.execute(
+        select(
+            WatchDailyStat.stat_date,
+            func.sum(WatchDailyStat.watched_seconds),
+            func.count(func.distinct(WatchDailyStat.media_id)),
+            func.sum(WatchDailyStat.completion_count),
+        )
+        .where(
+            WatchDailyStat.stat_date >= resolved_start,
+            WatchDailyStat.stat_date <= resolved_end,
+        )
+        .group_by(WatchDailyStat.stat_date)
+        .order_by(WatchDailyStat.stat_date)
+    ).all()
+    values_by_date = {
+        stat_date: (
+            float(watched_seconds),
+            int(watched_media_count),
+            int(completed_count),
+        )
+        for stat_date, watched_seconds, watched_media_count, completed_count in rows
+    }
+    items = []
+    current_date = resolved_start
+    while current_date <= resolved_end:
+        watched_seconds, watched_media_count, completed_count = values_by_date.get(
+            current_date,
+            (0, 0, 0),
+        )
+        items.append(
+            DailyWatchStatRead(
+                date=current_date,
+                watched_seconds=watched_seconds,
+                watched_minutes=round(watched_seconds / 60, 2),
+                watched_media_count=watched_media_count,
+                completed_count=completed_count,
+            )
+        )
+        current_date += timedelta(days=1)
+    return DailyWatchStatsResponse(
+        start_date=resolved_start,
+        end_date=resolved_end,
+        items=items,
+    )
+
+
 @router.post("/batch-delete", response_model=HistoryBatchDeleteResponse)
 def batch_delete_history(
     payload: HistoryBatchDeleteRequest,
@@ -159,6 +249,7 @@ def batch_delete_history(
     deleted_media_ids = [media_id for media_id in payload.media_ids if media_id in existing_set]
     missing_media_ids = [media_id for media_id in payload.media_ids if media_id not in existing_set]
     if deleted_media_ids:
+        db.execute(delete(WatchDailyStat).where(WatchDailyStat.media_id.in_(deleted_media_ids)))
         db.execute(delete(WatchHistory).where(WatchHistory.media_id.in_(deleted_media_ids)))
         db.commit()
     return HistoryBatchDeleteResponse(
@@ -171,7 +262,9 @@ def batch_delete_history(
 @router.delete("/clear", response_model=HistoryClearResponse)
 def clear_history(db: Session = Depends(get_db)):
     deleted_count = db.scalar(select(func.count(WatchHistory.id))) or 0
-    if deleted_count:
+    stats_count = db.scalar(select(func.count(WatchDailyStat.id))) or 0
+    if deleted_count or stats_count:
+        db.execute(delete(WatchDailyStat))
         db.execute(delete(WatchHistory))
         db.commit()
     return HistoryClearResponse(deleted_count=deleted_count)
@@ -328,9 +421,10 @@ def mark_media_unwatched(
     if db.get(Media, media_id) is None:
         raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
     history = db.scalar(select(WatchHistory).where(WatchHistory.media_id == media_id))
+    db.execute(delete(WatchDailyStat).where(WatchDailyStat.media_id == media_id))
     if history is not None:
         db.delete(history)
-        db.commit()
+    db.commit()
 
 
 @router.get("/{media_id}", response_model=HistoryRead)
@@ -354,5 +448,6 @@ def delete_history(
     history = db.scalar(select(WatchHistory).where(WatchHistory.media_id == media_id))
     if not history:
         raise NotFoundError("观看记录不存在", code="WATCH_HISTORY_NOT_FOUND")
+    db.execute(delete(WatchDailyStat).where(WatchDailyStat.media_id == media_id))
     db.delete(history)
     db.commit()

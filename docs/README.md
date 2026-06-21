@@ -75,5 +75,6 @@
 - [H05～H07：观看完成状态与手动标记](watch-completion-state.md)
 - [H08～H09：最近观看分集与下一集推荐](recent-and-next-episode.md)
 - [H10～H12：删除观看历史](watch-history-deletion.md)
+- [H13～H14：累计观看时长与每日统计](watch-time-statistics.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

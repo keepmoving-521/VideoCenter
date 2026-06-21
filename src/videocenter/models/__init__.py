@@ -1,6 +1,6 @@
 from videocenter.models.analysis import AnalysisTask, AnalysisTaskStatus
 from videocenter.models.download import DownloadTask
-from videocenter.models.history import WatchHistory
+from videocenter.models.history import WatchDailyStat, WatchHistory
 from videocenter.models.hls import HlsTask, HlsTaskStatus
 from videocenter.models.media import (
     Episode,
@@ -33,5 +33,6 @@ __all__ = [
     "ScanTask",
     "ScanTaskStatus",
     "Tag",
+    "WatchDailyStat",
     "WatchHistory",
 ]

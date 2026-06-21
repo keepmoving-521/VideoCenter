@@ -37,6 +37,7 @@ from videocenter.models import (  # noqa: E402, F401
     ScanTask,
     Season,
     Tag,
+    WatchDailyStat,
     WatchHistory,
 )
 from videocenter.services.parse_workflow import parse_workflow_store  # noqa: E402

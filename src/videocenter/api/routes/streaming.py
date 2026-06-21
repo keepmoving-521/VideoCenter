@@ -308,6 +308,8 @@ def save_playback_progress(
         episode_id=episode_id,
         position_seconds=payload.position_seconds,
         duration_seconds=duration_seconds,
+        watched_seconds_delta=payload.watched_seconds,
+        track_activity=True,
     )
 
 
