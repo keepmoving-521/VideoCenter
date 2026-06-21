@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from videocenter.models.media import LocalResource, MediaStatus
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 from videocenter.services.local_library import restore_scan_tasks, run_scan_task
+from videocenter.services.media_probe import VideoMediaInfo
 
 
 def test_scan_task_runs_in_background_and_reports_progress(
@@ -139,6 +140,49 @@ def test_scan_recognizes_movie_and_series_file_names(
     finally:
         movie.unlink(missing_ok=True)
         episode.unlink(missing_ok=True)
+        root.rmdir()
+
+
+def test_scan_probes_video_media_information(
+    api_client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    root = Path("data/media/scan-media-info").resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    video = root / "movie.mp4"
+    video.write_bytes(b"video")
+    monkeypatch.setattr(
+        "videocenter.api.routes.local_resources.start_scan_task",
+        lambda task_id: None,
+    )
+    monkeypatch.setattr(
+        "videocenter.services.local_library.probe_video_file",
+        lambda path: VideoMediaInfo(
+            duration_seconds=125.5,
+            width=1920,
+            height=1080,
+            video_codec="h264",
+            bitrate=8_000_000,
+        ),
+    )
+
+    try:
+        task_id = api_client.post(
+            "/api/v1/local-resources/scan",
+            json={"path": str(root)},
+        ).json()["id"]
+        run_scan_task(task_id)
+
+        resource = api_client.get("/api/v1/local-resources").json()[0]
+        assert resource["duration_seconds"] == 125.5
+        assert resource["video_width"] == 1920
+        assert resource["video_height"] == 1080
+        assert resource["video_codec"] == "h264"
+        assert resource["bitrate"] == 8_000_000
+        assert db_session.query(LocalResource).one().media_info_probed is True
+    finally:
+        video.unlink(missing_ok=True)
         root.rmdir()
 
 

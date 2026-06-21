@@ -277,6 +277,10 @@ class LocalResourceRead(BaseModel):
     file_size: int
     mime_type: str
     duration_seconds: float | None
+    video_width: int | None
+    video_height: int | None
+    video_codec: str | None
+    bitrate: int | None
     modified_at_ns: int | None
     checksum_sha256: str | None
     detected_media_type: MediaType | None

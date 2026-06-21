@@ -227,6 +227,15 @@ class LocalResource(Base):
     file_size: Mapped[int] = mapped_column(Integer)
     mime_type: Mapped[str] = mapped_column(String(128), default="video/mp4")
     duration_seconds: Mapped[float | None] = mapped_column(Float)
+    video_width: Mapped[int | None] = mapped_column(Integer)
+    video_height: Mapped[int | None] = mapped_column(Integer)
+    video_codec: Mapped[str | None] = mapped_column(String(100))
+    bitrate: Mapped[int | None] = mapped_column(Integer)
+    media_info_probed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="0",
+    )
     modified_at_ns: Mapped[int | None] = mapped_column(Integer)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64), index=True)
     detected_media_type: Mapped[str | None] = mapped_column(String(30))

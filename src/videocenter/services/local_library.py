@@ -13,6 +13,7 @@ from videocenter.models.media import LocalResource
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 from videocenter.services.downloads import update_media_download_status
 from videocenter.services.local_file_hashes import calculate_sha256
+from videocenter.services.media_probe import VideoMediaInfo, probe_video_file
 from videocenter.services.video_filename import ParsedVideoFilename, parse_video_filename
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".ts"}
@@ -152,6 +153,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
         and resource.is_available
         and resource.parsed_title is not None
         and resource.checksum_sha256 is not None
+        and resource.media_info_probed
     ):
         task.skipped_files += 1
         return resource.media_id
@@ -159,6 +161,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     parsed = parse_video_filename(path.name)
     checksum_sha256 = calculate_sha256(path)
+    media_info = probe_video_file(path)
     if resource is None:
         resource = LocalResource(
             media_id=task.media_id,
@@ -170,6 +173,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
             checksum_sha256=checksum_sha256,
         )
         _apply_parsed_filename(resource, parsed)
+        _apply_media_info(resource, media_info)
         db.add(resource)
         task.added_files += 1
         return task.media_id
@@ -183,6 +187,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     resource.is_available = True
     resource.missing_at = None
     _apply_parsed_filename(resource, parsed)
+    _apply_media_info(resource, media_info)
     if task.media_id is not None:
         resource.media_id = task.media_id
     if was_missing:
@@ -201,6 +206,18 @@ def _apply_parsed_filename(
     resource.parsed_release_year = parsed.release_year
     resource.parsed_season_number = parsed.season_number
     resource.parsed_episode_number = parsed.episode_number
+
+
+def _apply_media_info(
+    resource: LocalResource,
+    media_info: VideoMediaInfo | None,
+) -> None:
+    resource.media_info_probed = True
+    resource.duration_seconds = media_info.duration_seconds if media_info else None
+    resource.video_width = media_info.width if media_info else None
+    resource.video_height = media_info.height if media_info else None
+    resource.video_codec = media_info.video_codec if media_info else None
+    resource.bitrate = media_info.bitrate if media_info else None
 
 
 def _mark_missing_resources(

@@ -219,6 +219,9 @@ python -m pytest
 FFmpeg、FFprobe 的自动检测和自定义路径配置请参阅
 [FFmpeg 检测与配置文档](docs/ffmpeg-detection-configuration.md)。
 
+视频时长、分辨率、编码格式和码率提取请参阅
+[视频媒体信息文档](docs/video-media-information.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

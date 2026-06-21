@@ -26,6 +26,7 @@ from videocenter.services.downloaders import (
 )
 from videocenter.services.downloaders.base import normalize_download_url
 from videocenter.services.local_file_hashes import calculate_sha256
+from videocenter.services.media_probe import probe_video_file
 from videocenter.services.notifications import create_download_completed_notification
 from videocenter.services.video_filename import parse_video_filename
 
@@ -340,6 +341,13 @@ def register_local_resource(
     resource.parsed_episode_number = parsed.episode_number
     if result.target_path.exists():
         resource.modified_at_ns = result.target_path.stat().st_mtime_ns
+        media_info = probe_video_file(result.target_path)
+        resource.media_info_probed = True
+        resource.duration_seconds = media_info.duration_seconds if media_info else None
+        resource.video_width = media_info.width if media_info else None
+        resource.video_height = media_info.height if media_info else None
+        resource.video_codec = media_info.video_codec if media_info else None
+        resource.bitrate = media_info.bitrate if media_info else None
     return resource
 
 
