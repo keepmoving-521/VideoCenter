@@ -204,6 +204,9 @@ python -m pytest
 视频文件类型、标题、年份以及电视剧季集编号识别请参阅
 [视频文件名识别文档](docs/video-filename-recognition.md)。
 
+本地文件的单个关联、重新关联、解除关联和批量关联请参阅
+[本地文件关联文档](docs/local-resource-associations.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

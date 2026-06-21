@@ -288,6 +288,26 @@ class LocalResourceRead(BaseModel):
     created_at: datetime
 
 
+class LocalResourceAssociationRequest(ApiRequestModel):
+    media_id: PositiveId | None
+
+
+class LocalResourceBatchAssociationRequest(LocalResourceAssociationRequest):
+    resource_ids: list[PositiveId] = Field(min_length=1, max_length=100)
+
+    @field_validator("resource_ids")
+    @classmethod
+    def deduplicate_resource_ids(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(value))
+
+
+class LocalResourceBatchAssociationResponse(BaseModel):
+    media_id: int | None
+    associated_count: int
+    associated_resource_ids: list[int]
+    missing_resource_ids: list[int]
+
+
 class MediaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
