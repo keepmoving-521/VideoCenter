@@ -210,6 +210,9 @@ python -m pytest
 本地文件 SHA-256 计算和重复文件检测请参阅
 [文件哈希与重复检测文档](docs/local-file-hash-duplicates.md)。
 
+文件重命名、回收站安全删除和失效资源记录清理请参阅
+[本地文件操作文档](docs/local-file-operations.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

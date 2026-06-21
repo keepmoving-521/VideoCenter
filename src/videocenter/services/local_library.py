@@ -16,6 +16,7 @@ from videocenter.services.local_file_hashes import calculate_sha256
 from videocenter.services.video_filename import ParsedVideoFilename, parse_video_filename
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".ts"}
+TRASH_DIRECTORY_NAME = ".videocenter-trash"
 logger = logging.getLogger(__name__)
 _scan_threads: dict[int, threading.Thread] = {}
 _scan_lock = threading.Lock()
@@ -76,7 +77,9 @@ def run_scan_task(task_id: int) -> None:
             files = sorted(
                 path
                 for path in Path(task.path).rglob("*")
-                if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
+                if path.is_file()
+                and path.suffix.lower() in VIDEO_EXTENSIONS
+                and TRASH_DIRECTORY_NAME not in path.parts
             )
             task.total_files = len(files)
             task.discovered_files = len(files)

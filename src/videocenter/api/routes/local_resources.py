@@ -11,14 +11,21 @@ from videocenter.models.scan import ScanTask
 from videocenter.schemas.media import (
     DuplicateLocalResourceGroup,
     DuplicateLocalResourcesResponse,
+    InvalidLocalResourceCleanupResponse,
     LocalResourceAssociationRequest,
     LocalResourceBatchAssociationRequest,
     LocalResourceBatchAssociationResponse,
     LocalResourceRead,
+    LocalResourceRenameRequest,
     LocalScanRequest,
 )
 from videocenter.schemas.scan import ScanTaskRead
 from videocenter.services.local_file_hashes import find_duplicate_local_resources
+from videocenter.services.local_file_operations import (
+    cleanup_invalid_local_resources,
+    rename_local_resource,
+    safely_delete_local_resource,
+)
 from videocenter.services.local_library import (
     create_scan_task,
     resolve_library_path,
@@ -56,6 +63,18 @@ def list_duplicate_resources(db: Session = Depends(get_db)):
             group.file_size * (group.duplicate_count - 1) for group in response_groups
         ),
         groups=response_groups,
+    )
+
+
+@router.post(
+    "/cleanup-invalid",
+    response_model=InvalidLocalResourceCleanupResponse,
+)
+def cleanup_invalid_resources(db: Session = Depends(get_db)):
+    deleted_ids = cleanup_invalid_local_resources(db)
+    return InvalidLocalResourceCleanupResponse(
+        deleted_count=len(deleted_ids),
+        deleted_resource_ids=deleted_ids,
     )
 
 
@@ -119,6 +138,33 @@ def associate_resource(
     if missing_ids:
         raise NotFoundError("本地资源不存在", code="LOCAL_RESOURCE_NOT_FOUND")
     return resources[0]
+
+
+@router.put(
+    "/{resource_id}/rename",
+    response_model=LocalResourceRead,
+)
+def rename_resource(
+    resource_id: Annotated[int, Path(gt=0)],
+    payload: LocalResourceRenameRequest,
+    db: Session = Depends(get_db),
+):
+    return rename_local_resource(
+        db,
+        resource_id=resource_id,
+        new_file_name=payload.file_name,
+    )
+
+
+@router.delete(
+    "/{resource_id}/file",
+    response_model=LocalResourceRead,
+)
+def safely_delete_resource_file(
+    resource_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    return safely_delete_local_resource(db, resource_id=resource_id)
 
 
 @router.get("/scan-tasks", response_model=list[ScanTaskRead])

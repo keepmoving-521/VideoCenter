@@ -309,6 +309,18 @@ class LocalResourceBatchAssociationResponse(BaseModel):
     missing_resource_ids: list[int]
 
 
+class LocalResourceRenameRequest(ApiRequestModel):
+    file_name: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=512),
+    ]
+
+
+class InvalidLocalResourceCleanupResponse(BaseModel):
+    deleted_count: int
+    deleted_resource_ids: list[int]
+
+
 class DuplicateLocalResourceGroup(BaseModel):
     checksum_sha256: str
     file_size: int
