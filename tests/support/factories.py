@@ -100,6 +100,7 @@ class ModelFactory:
             "source_url": "https://example.com/test-video.mp4",
             "target_name": f"test-video-{uuid4().hex}.mp4",
             "target_directory": "",
+            "downloader_name": "http-direct",
             "status": DownloadStatus.WAITING,
             "priority": 0,
             "progress": 0,

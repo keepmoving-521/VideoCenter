@@ -45,3 +45,4 @@ uvloop==0.22.1 ; platform_python_implementation != 'PyPy' and sys_platform != 'c
 virtualenv==21.5.1
 watchfiles==1.2.0
 websockets==16.0
+yt-dlp==2026.6.9

@@ -10,6 +10,7 @@ from videocenter.services.downloaders.base import (
     ProgressCallback,
 )
 from videocenter.services.downloaders.http import HttpDirectDownloader
+from videocenter.services.downloaders.yt_dlp import YtDlpDownloader
 
 __all__ = [
     "DownloadCancellationToken",
@@ -22,4 +23,5 @@ __all__ = [
     "Downloader",
     "HttpDirectDownloader",
     "ProgressCallback",
+    "YtDlpDownloader",
 ]

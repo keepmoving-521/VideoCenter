@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
@@ -7,6 +8,12 @@ from videocenter.models.download import DownloadStatus
 from videocenter.schemas.common import ApiRequestModel, PositiveId
 
 INVALID_FILE_NAME_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+class DownloadProvider(StrEnum):
+    AUTO = "auto"
+    HTTP_DIRECT = "http-direct"
+    YT_DLP = "yt-dlp"
 
 
 class DownloadCreate(ApiRequestModel):
@@ -21,6 +28,7 @@ class DownloadCreate(ApiRequestModel):
     )
     media_id: PositiveId | None = None
     priority: int = Field(default=0, ge=-100, le=100)
+    downloader: DownloadProvider = DownloadProvider.AUTO
 
     @field_validator("target_name")
     @classmethod
@@ -59,6 +67,7 @@ class DownloadRead(BaseModel):
     target_name: str
     target_directory: str
     target_path: str | None
+    downloader_name: str
     expected_sha256: str | None
     checksum_sha256: str | None
     status: DownloadStatus

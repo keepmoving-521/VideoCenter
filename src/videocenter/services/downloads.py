@@ -22,10 +22,12 @@ from videocenter.services.downloaders import (
     DownloadProgress,
     DownloadRequest,
     HttpDirectDownloader,
+    YtDlpDownloader,
 )
 from videocenter.services.downloaders.base import normalize_download_url
 
 _default_downloader = HttpDirectDownloader()
+_yt_dlp_downloader = YtDlpDownloader()
 logger = logging.getLogger(__name__)
 _queue_lock = threading.Lock()
 _download_queue: DownloadTaskQueue | None = None
@@ -36,6 +38,23 @@ WINDOWS_RESERVED_NAMES = {
     "NUL",
     *(f"COM{index}" for index in range(1, 10)),
     *(f"LPT{index}" for index in range(1, 10)),
+}
+DIRECT_MEDIA_EXTENSIONS = {
+    ".3gp",
+    ".aac",
+    ".avi",
+    ".flac",
+    ".m4a",
+    ".m4v",
+    ".mkv",
+    ".mov",
+    ".mp3",
+    ".mp4",
+    ".ogg",
+    ".opus",
+    ".ts",
+    ".wav",
+    ".webm",
 }
 
 
@@ -231,6 +250,24 @@ def normalized_download_source(source_url: str) -> str:
     return normalize_download_url(source_url)
 
 
+def select_download_provider(
+    source_url: str,
+    requested_provider: str = "auto",
+) -> str:
+    if requested_provider != "auto":
+        return requested_provider
+    suffix = Path(urlsplit(source_url).path).suffix.casefold()
+    return "http-direct" if suffix in DIRECT_MEDIA_EXTENSIONS else "yt-dlp"
+
+
+def get_downloader(name: str) -> Downloader:
+    if name == "http-direct":
+        return _default_downloader
+    if name == "yt-dlp":
+        return _yt_dlp_downloader
+    raise ValueError(f"不支持的下载器：{name}")
+
+
 def generate_target_name(
     source_url: str,
     *,
@@ -336,7 +373,7 @@ def update_media_download_status(db: Session, media_id: int | None) -> None:
 def _run_download(
     task_id: int,
     cancellation_token: DownloadCancellationToken,
-    downloader: Downloader = _default_downloader,
+    downloader: Downloader | None = None,
 ) -> None:
     started_at = time.perf_counter()
     try:
@@ -355,6 +392,12 @@ def _run_download(
                 return
             task.status = DownloadStatus.DOWNLOADING
             task.error_message = None
+            selected_name = select_download_provider(
+                task.source_url,
+                task.downloader_name,
+            )
+            task.downloader_name = selected_name
+            selected_downloader = downloader or get_downloader(selected_name)
             update_media_download_status(db, task.media_id)
             db.commit()
             logger.info(
@@ -362,7 +405,7 @@ def _run_download(
                 extra=download_log_context(
                     task,
                     event="started",
-                    downloader=downloader.name,
+                    downloader=selected_downloader.name,
                 ),
             )
 
@@ -410,7 +453,7 @@ def _run_download(
                             ),
                         )
 
-            result = downloader.download(
+            result = selected_downloader.download(
                 request,
                 progress_callback=update_progress,
                 cancellation_token=cancellation_token,

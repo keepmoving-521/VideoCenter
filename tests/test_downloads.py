@@ -22,6 +22,7 @@ from videocenter.services.downloads import (
     resolve_download_directory,
     restore_download_queue,
     safe_target_name,
+    select_download_provider,
 )
 
 
@@ -288,6 +289,49 @@ def test_generated_target_name_uses_url_and_stable_hash():
         "https://example.com/video.mp4",
         media_title="Mr. Robot",
     ).startswith("Mr. Robot-")
+
+
+@pytest.mark.parametrize(
+    ("source_url", "requested", "expected"),
+    [
+        ("https://cdn.example.com/video.mp4?token=1", "auto", "http-direct"),
+        ("https://example.com/watch/123", "auto", "yt-dlp"),
+        ("https://example.com/playlist/master.m3u8", "auto", "yt-dlp"),
+        ("https://example.com/watch/123", "http-direct", "http-direct"),
+        ("https://cdn.example.com/video.mp4", "yt-dlp", "yt-dlp"),
+    ],
+)
+def test_download_provider_selection(source_url, requested, expected):
+    assert select_download_provider(source_url, requested) == expected
+
+
+@pytest.mark.parametrize(
+    ("source_url", "requested", "expected"),
+    [
+        ("https://cdn.example.com/video.mp4", None, "http-direct"),
+        ("https://example.com/watch/123", None, "yt-dlp"),
+        ("https://cdn.example.com/video.mp4", "yt-dlp", "yt-dlp"),
+    ],
+)
+def test_create_download_persists_selected_provider(
+    api_client: TestClient,
+    monkeypatch,
+    source_url,
+    requested,
+    expected,
+):
+    monkeypatch.setattr(
+        "videocenter.api.routes.downloads.start_download",
+        lambda task_id, *, priority=0: None,
+    )
+    payload = {"source_url": source_url}
+    if requested is not None:
+        payload["downloader"] = requested
+
+    response = api_client.post("/api/v1/downloads", json=payload)
+
+    assert response.status_code == 202
+    assert response.json()["downloader_name"] == expected
 
 
 def test_duplicate_download_is_rejected_but_cancelled_task_can_be_recreated(

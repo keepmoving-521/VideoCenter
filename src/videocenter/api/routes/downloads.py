@@ -18,6 +18,7 @@ from videocenter.services.downloads import (
     resume_download,
     retry_download,
     safe_target_name,
+    select_download_provider,
     start_download,
     update_media_download_status,
 )
@@ -36,6 +37,7 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
     if payload.media_id is not None and media is None:
         raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
     source_url = normalized_download_source(str(payload.source_url))
+    downloader_name = select_download_provider(source_url, payload.downloader.value)
     duplicate = db.scalar(
         select(DownloadTask)
         .where(
@@ -76,6 +78,7 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
         source_url=source_url,
         target_name=target_name,
         target_directory=target_directory,
+        downloader_name=downloader_name,
         expected_sha256=payload.expected_sha256,
         priority=payload.priority,
     )

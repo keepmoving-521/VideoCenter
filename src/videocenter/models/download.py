@@ -62,6 +62,11 @@ class DownloadTask(Base):
         server_default="",
     )
     target_path: Mapped[str | None] = mapped_column(String(2048))
+    downloader_name: Mapped[str] = mapped_column(
+        String(50),
+        default="auto",
+        server_default="auto",
+    )
     expected_sha256: Mapped[str | None] = mapped_column(String(64))
     checksum_sha256: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[DownloadStatus] = mapped_column(
