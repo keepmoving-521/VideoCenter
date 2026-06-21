@@ -13,11 +13,19 @@ from videocenter.core.database import get_db
 from videocenter.core.exceptions import AppException, NotFoundError
 from videocenter.models.media import LocalResource
 from videocenter.schemas.streaming import (
+    PlaybackAudioTrackList,
+    PlaybackBrowserCompatibility,
     PlaybackResourceDetail,
     PlaybackSubtitle,
     PlaybackSubtitleList,
+    PlaybackVideoQuality,
 )
 from videocenter.services.downloads import update_media_download_status
+from videocenter.services.playback_capabilities import (
+    aspect_ratio,
+    evaluate_browser_compatibility,
+    video_quality_label,
+)
 from videocenter.services.streaming import (
     ByteRange,
     is_not_modified,
@@ -140,8 +148,79 @@ def get_playback_resource_detail(
             for index in range(len(resource.preview_thumbnail_paths))
         ],
         subtitles_url=f"/api/v1/stream/{resource.id}/subtitles",
+        audio_tracks_url=f"/api/v1/stream/{resource.id}/audio-tracks",
+        quality_url=f"/api/v1/stream/{resource.id}/quality",
+        compatibility_url=f"/api/v1/stream/{resource.id}/compatibility",
         supports_range=True,
         cache_control=CACHE_CONTROL,
+    )
+
+
+@router.get("/{resource_id}/audio-tracks", response_model=PlaybackAudioTrackList)
+def list_playback_audio_tracks(
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    db: Session = Depends(get_db),
+):
+    resource = _get_resource_or_404(db, resource_id)
+    default_track = next(
+        (track for track in resource.audio_tracks if track.get("is_default")),
+        None,
+    )
+    return PlaybackAudioTrackList(
+        resource_id=resource.id,
+        default_stream_index=default_track.get("stream_index") if default_track else None,
+        tracks=resource.audio_tracks,
+    )
+
+
+@router.get("/{resource_id}/quality", response_model=PlaybackVideoQuality)
+def get_playback_video_quality(
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    db: Session = Depends(get_db),
+):
+    resource = _get_resource_or_404(db, resource_id)
+    return PlaybackVideoQuality(
+        resource_id=resource.id,
+        label=video_quality_label(resource.video_width, resource.video_height),
+        width=resource.video_width,
+        height=resource.video_height,
+        aspect_ratio=aspect_ratio(resource.video_width, resource.video_height),
+        pixel_count=(
+            resource.video_width * resource.video_height
+            if resource.video_width and resource.video_height
+            else None
+        ),
+        bitrate=resource.bitrate,
+        video_codec=resource.video_codec,
+    )
+
+
+@router.get(
+    "/{resource_id}/compatibility",
+    response_model=PlaybackBrowserCompatibility,
+)
+def get_browser_compatibility(
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    user_agent: Annotated[
+        str | None,
+        Header(alias="User-Agent", max_length=1024),
+    ] = None,
+    db: Session = Depends(get_db),
+):
+    resource = _get_resource_or_404(db, resource_id)
+    compatibility = evaluate_browser_compatibility(resource, user_agent)
+    return PlaybackBrowserCompatibility(
+        resource_id=resource.id,
+        browser_family=compatibility.browser_family,
+        container=compatibility.container,
+        mime_type=resource.mime_type,
+        video_codec=resource.video_codec,
+        audio_codec=resource.audio_codec,
+        status=compatibility.status,
+        direct_play=compatibility.direct_play,
+        can_play_type=compatibility.can_play_type,
+        reason=compatibility.reason,
+        recommended_action=compatibility.recommended_action,
     )
 
 
@@ -283,3 +362,10 @@ def _mark_resource_missing(db: Session, resource: LocalResource) -> None:
         db.flush()
         update_media_download_status(db, resource.media_id)
         db.commit()
+
+
+def _get_resource_or_404(db: Session, resource_id: int) -> LocalResource:
+    resource = db.get(LocalResource, resource_id)
+    if resource is None:
+        raise NotFoundError("本地资源不存在", code="LOCAL_RESOURCE_NOT_FOUND")
+    return resource
