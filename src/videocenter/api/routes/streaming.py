@@ -1,3 +1,4 @@
+import subprocess
 from datetime import datetime
 from email.utils import formatdate
 from pathlib import Path
@@ -11,13 +12,22 @@ from sqlalchemy.orm import Session
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import AppException, NotFoundError
 from videocenter.models.media import LocalResource
-from videocenter.schemas.streaming import PlaybackResourceDetail
+from videocenter.schemas.streaming import (
+    PlaybackResourceDetail,
+    PlaybackSubtitle,
+    PlaybackSubtitleList,
+)
 from videocenter.services.downloads import update_media_download_status
 from videocenter.services.streaming import (
     ByteRange,
     is_not_modified,
     iter_file_range,
     parse_range_header,
+)
+from videocenter.services.subtitles import (
+    discover_external_subtitles,
+    get_external_subtitle,
+    subtitle_as_webvtt,
 )
 
 router = APIRouter()
@@ -129,8 +139,95 @@ def get_playback_resource_detail(
             f"/api/v1/local-resources/{resource.id}/previews/{index}"
             for index in range(len(resource.preview_thumbnail_paths))
         ],
+        subtitles_url=f"/api/v1/stream/{resource.id}/subtitles",
         supports_range=True,
         cache_control=CACHE_CONTROL,
+    )
+
+
+@router.get("/{resource_id}/subtitles", response_model=PlaybackSubtitleList)
+def list_playback_subtitles(
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    db: Session = Depends(get_db),
+):
+    resource = db.get(LocalResource, resource_id)
+    if resource is None:
+        raise NotFoundError("本地资源不存在", code="LOCAL_RESOURCE_NOT_FOUND")
+    subtitles = [
+        PlaybackSubtitle(
+            subtitle_id=f"embedded-{item['stream_index']}",
+            source="embedded",
+            format=item.get("codec"),
+            language=item.get("language"),
+            title=item.get("title"),
+            is_default=bool(item.get("is_default")),
+            is_forced=bool(item.get("is_forced")),
+            access_url=None,
+        )
+        for item in resource.embedded_subtitles
+    ]
+    subtitles.extend(
+        PlaybackSubtitle(
+            subtitle_id=subtitle.subtitle_id,
+            source="external",
+            format=subtitle.format,
+            language=subtitle.language,
+            title=subtitle.file_name,
+            is_default=False,
+            is_forced=False,
+            access_url=(
+                f"/api/v1/stream/{resource.id}/subtitles/{subtitle.subtitle_id}?format=webvtt"
+            ),
+        )
+        for subtitle in discover_external_subtitles(Path(resource.file_path))
+    )
+    return PlaybackSubtitleList(resource_id=resource.id, subtitles=subtitles)
+
+
+@router.get("/{resource_id}/subtitles/{subtitle_id}")
+def get_external_subtitle_file(
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    subtitle_id: Annotated[str, ApiPath(min_length=1, max_length=64)],
+    format: str = "webvtt",
+    db: Session = Depends(get_db),
+):
+    resource = db.get(LocalResource, resource_id)
+    if resource is None:
+        raise NotFoundError("本地资源不存在", code="LOCAL_RESOURCE_NOT_FOUND")
+    subtitle = get_external_subtitle(Path(resource.file_path), subtitle_id)
+    if subtitle is None:
+        raise NotFoundError("外挂字幕不存在", code="EXTERNAL_SUBTITLE_NOT_FOUND")
+    if format not in {"webvtt", "original"}:
+        raise AppException(
+            "字幕输出格式仅支持 webvtt 或 original",
+            code="INVALID_SUBTITLE_FORMAT",
+            status_code=400,
+        )
+    if format == "original":
+        media_type = {
+            "vtt": "text/vtt",
+            "srt": "application/x-subrip",
+            "ass": "text/x-ssa",
+            "ssa": "text/x-ssa",
+        }.get(subtitle.format, "text/plain")
+        return FileResponse(
+            subtitle.path,
+            media_type=media_type,
+            headers={"Cache-Control": CACHE_CONTROL},
+        )
+    try:
+        webvtt_path = subtitle_as_webvtt(subtitle)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        raise AppException(
+            "字幕格式转换失败",
+            code="SUBTITLE_CONVERSION_FAILED",
+            status_code=422,
+            details=str(exc),
+        ) from exc
+    return FileResponse(
+        webvtt_path,
+        media_type="text/vtt",
+        headers={"Cache-Control": CACHE_CONTROL},
     )
 
 

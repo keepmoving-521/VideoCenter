@@ -240,6 +240,9 @@ FFmpeg、FFprobe 的自动检测和自定义路径配置请参阅
 视频缓存协商、播放时文件丢失检测和播放资源详情请参阅
 [视频播放资源增强文档](docs/video-cache-missing-playback-detail.md)。
 
+字幕列表、外挂字幕访问和 WebVTT 格式转换请参阅
+[播放字幕与 WebVTT 文档](docs/playback-subtitles-webvtt.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

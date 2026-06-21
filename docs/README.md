@@ -65,5 +65,6 @@
 - [A14～A15：分析任务进度与失败重试](analysis-task-progress-retry.md)
 - [P01～P02：HTTP Range 与视频 HEAD 请求](http-range-head-streaming.md)
 - [P03～P05：视频缓存、文件丢失检测与播放详情](video-cache-missing-playback-detail.md)
+- [P06～P09：字幕列表、外挂字幕访问与 WebVTT 转换](playback-subtitles-webvtt.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。
