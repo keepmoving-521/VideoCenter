@@ -10,15 +10,16 @@ from sqlalchemy.orm import Session
 from videocenter.core.config import get_settings
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import BadRequestError, NotFoundError
+from videocenter.models.analysis import AnalysisTask
 from videocenter.models.media import LocalResource, Media
 from videocenter.models.scan import ScanTask
+from videocenter.schemas.analysis import AnalysisTaskRead
 from videocenter.schemas.media import (
     DuplicateLocalResourceGroup,
     DuplicateLocalResourcesResponse,
     InvalidLocalResourceCleanupResponse,
     LocalResourceAssociationRequest,
     LocalResourceBatchAnalysisRequest,
-    LocalResourceBatchAnalysisResponse,
     LocalResourceBatchAssociationRequest,
     LocalResourceBatchAssociationResponse,
     LocalResourceRead,
@@ -26,6 +27,11 @@ from videocenter.schemas.media import (
     LocalScanRequest,
 )
 from videocenter.schemas.scan import ScanTaskRead
+from videocenter.services.analysis_tasks import (
+    create_analysis_task,
+    retry_analysis_task,
+    start_analysis_task,
+)
 from videocenter.services.local_file_hashes import find_duplicate_local_resources
 from videocenter.services.local_file_operations import (
     cleanup_invalid_local_resources,
@@ -37,7 +43,6 @@ from videocenter.services.local_library import (
     resolve_library_path,
     start_scan_task,
 )
-from videocenter.services.local_resource_analysis import analyze_local_resource
 from videocenter.services.local_resource_associations import associate_local_resources
 from videocenter.services.media_artwork import MEDIA_CACHE_DIRECTORY_NAME
 
@@ -109,48 +114,53 @@ def cleanup_invalid_resources(db: Session = Depends(get_db)):
 
 @router.post(
     "/batch-analyze",
-    response_model=LocalResourceBatchAnalysisResponse,
+    response_model=AnalysisTaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 def batch_analyze_resources(
     payload: LocalResourceBatchAnalysisRequest,
     db: Session = Depends(get_db),
 ):
-    resources = {
-        resource.id: resource
-        for resource in db.scalars(
-            select(LocalResource).where(LocalResource.id.in_(payload.resource_ids))
-        ).all()
-    }
-    analyzed_ids: list[int] = []
-    skipped_ids: list[int] = []
-    missing_ids: list[int] = []
-    failures: list[dict[str, object]] = []
-    for resource_id in payload.resource_ids:
-        resource = resources.get(resource_id)
-        if resource is None:
-            missing_ids.append(resource_id)
-            continue
-        try:
-            with db.begin_nested():
-                result = analyze_local_resource(resource, force=payload.force)
-        except Exception as exc:
-            failures.append({"resource_id": resource_id, "error": str(exc)})
-            continue
-        if result == "analyzed":
-            analyzed_ids.append(resource_id)
-        elif result == "skipped":
-            skipped_ids.append(resource_id)
-        else:
-            missing_ids.append(resource_id)
-    db.commit()
-    return LocalResourceBatchAnalysisResponse(
-        requested_count=len(payload.resource_ids),
-        analyzed_count=len(analyzed_ids),
-        analyzed_resource_ids=analyzed_ids,
-        skipped_resource_ids=skipped_ids,
-        missing_resource_ids=missing_ids,
-        failures=failures,
+    task = create_analysis_task(
+        db,
+        resource_ids=payload.resource_ids,
+        force=payload.force,
     )
+    start_analysis_task(task.id)
+    return task
+
+
+@router.get("/analysis-tasks", response_model=list[AnalysisTaskRead])
+def list_analysis_tasks(db: Session = Depends(get_db)):
+    return db.scalars(select(AnalysisTask).order_by(AnalysisTask.id.desc())).all()
+
+
+@router.get("/analysis-tasks/{task_id}", response_model=AnalysisTaskRead)
+def get_analysis_task(
+    task_id: Annotated[int, ApiPath(gt=0)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(AnalysisTask, task_id)
+    if task is None:
+        raise NotFoundError("分析任务不存在", code="ANALYSIS_TASK_NOT_FOUND")
+    return task
+
+
+@router.post(
+    "/analysis-tasks/{task_id}/retry",
+    response_model=AnalysisTaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def retry_failed_analysis_task(
+    task_id: Annotated[int, ApiPath(gt=0)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(AnalysisTask, task_id)
+    if task is None:
+        raise NotFoundError("分析任务不存在", code="ANALYSIS_TASK_NOT_FOUND")
+    retry_task = retry_analysis_task(db, task)
+    start_analysis_task(retry_task.id)
+    return retry_task
 
 
 @router.post(

@@ -231,6 +231,9 @@ FFmpeg、FFprobe 的自动检测和自定义路径配置请参阅
 下载完成自动分析和已有本地视频批量分析请参阅
 [自动与批量视频分析文档](docs/automatic-batch-video-analysis.md)。
 
+后台分析任务进度、失败明细和重试机制请参阅
+[分析任务进度与重试文档](docs/analysis-task-progress-retry.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

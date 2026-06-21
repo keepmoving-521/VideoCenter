@@ -10,6 +10,7 @@ from videocenter.api.router import api_router
 from videocenter.core.config import get_settings
 from videocenter.core.logging import configure_logging
 from videocenter.schemas.error import STANDARD_ERROR_RESPONSES
+from videocenter.services.analysis_tasks import restore_analysis_tasks
 from videocenter.services.downloads import restore_download_queue
 from videocenter.services.local_library import restore_scan_tasks
 
@@ -35,6 +36,14 @@ async def lifespan(_: FastAPI):
         extra={
             "scan_event": "recovery_completed",
             "restored_scan_count": restored_scans,
+        },
+    )
+    restored_analyses = restore_analysis_tasks()
+    logger.info(
+        "Analysis task recovery completed",
+        extra={
+            "analysis_event": "recovery_completed",
+            "restored_analysis_count": restored_analyses,
         },
     )
     logger.info("Application started")

@@ -26,6 +26,7 @@ from tests.support.factories import ModelFactory  # noqa: E402
 from videocenter.core.database import Base, SessionLocal, engine  # noqa: E402
 from videocenter.main import app  # noqa: E402
 from videocenter.models import (  # noqa: E402, F401
+    AnalysisTask,
     DownloadTask,
     Episode,
     LocalResource,

@@ -1,41 +1,41 @@
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from tests.support.api import ApiAssertions
+from videocenter.models.analysis import AnalysisTask, AnalysisTaskStatus
+from videocenter.services.analysis_tasks import run_analysis_task
 
 pytestmark = pytest.mark.integration
 
 
-def test_batch_analysis_reports_analyzed_skipped_and_missing(
+def test_batch_analysis_task_reports_progress_and_results(
     api_client: TestClient,
+    db_session: Session,
     model_factory,
     monkeypatch,
 ):
-    analyzed = model_factory.local_resource(
-        media_info_probed=False,
-        visual_assets_generated=None,
-    )
+    analyzed = model_factory.local_resource()
     skipped = model_factory.local_resource(
         media_info_probed=True,
         visual_assets_generated=False,
     )
-    missing_file = model_factory.local_resource(
-        file_path=str(Path("data/media/missing-batch-analysis.mp4").resolve()),
-        media_info_probed=False,
-        visual_assets_generated=None,
+    missing_file = model_factory.local_resource()
+    monkeypatch.setattr(
+        "videocenter.api.routes.local_resources.start_analysis_task",
+        lambda task_id: None,
     )
 
     def fake_analyze(resource, *, force=False):
         if resource.id == analyzed.id:
-            resource.media_info_probed = True
             resource.video_codec = "hevc"
             return "analyzed"
         if resource.id == skipped.id:
-            return "analyzed" if force else "skipped"
+            return "skipped"
         return "missing"
 
     monkeypatch.setattr(
-        "videocenter.api.routes.local_resources.analyze_local_resource",
+        "videocenter.services.analysis_tasks.analyze_local_resource",
         fake_analyze,
     )
 
@@ -52,60 +52,101 @@ def test_batch_analysis_reports_analyzed_skipped_and_missing(
         },
     )
 
-    assert response.status_code == 200
-    assert response.json() == {
-        "requested_count": 4,
-        "analyzed_count": 1,
-        "analyzed_resource_ids": [analyzed.id],
-        "skipped_resource_ids": [skipped.id],
-        "missing_resource_ids": [missing_file.id, 999999],
-        "failures": [],
-    }
+    assert response.status_code == 202
+    created = response.json()
+    assert created["status"] == "waiting"
+    assert created["total_resources"] == 4
+
+    run_analysis_task(created["id"])
+    detail = api_client.get(f"/api/v1/local-resources/analysis-tasks/{created['id']}").json()
+    assert detail["status"] == "completed"
+    assert detail["progress"] == 100
+    assert detail["processed_resources"] == 4
+    assert detail["analyzed_resource_ids"] == [analyzed.id]
+    assert detail["skipped_resource_ids"] == [skipped.id]
+    assert detail["missing_resource_ids"] == [missing_file.id, 999999]
+    assert detail["failures"] == []
+    assert api_client.get("/api/v1/local-resources/analysis-tasks").json()[0]["id"] == created["id"]
+    db_session.refresh(analyzed)
+    assert analyzed.video_codec == "hevc"
 
 
-def test_batch_analysis_force_and_partial_failure(
+def test_analysis_failure_can_be_retried_as_new_task(
     api_client: TestClient,
-    db_session,
+    db_session: Session,
     model_factory,
     monkeypatch,
 ):
-    first = model_factory.local_resource(
-        media_info_probed=True,
-        visual_assets_generated=False,
-    )
+    first = model_factory.local_resource()
     second = model_factory.local_resource()
+    monkeypatch.setattr(
+        "videocenter.api.routes.local_resources.start_analysis_task",
+        lambda task_id: None,
+    )
 
-    def fake_analyze(resource, *, force=False):
-        assert force is True
+    def fail_second(resource, *, force=False):
         if resource.id == second.id:
             resource.video_codec = "should-rollback"
             raise RuntimeError("analysis failed")
-        resource.video_codec = "hevc"
+        resource.video_codec = "h264"
         return "analyzed"
 
     monkeypatch.setattr(
-        "videocenter.api.routes.local_resources.analyze_local_resource",
-        fake_analyze,
+        "videocenter.services.analysis_tasks.analyze_local_resource",
+        fail_second,
     )
-
-    response = api_client.post(
+    created = api_client.post(
         "/api/v1/local-resources/batch-analyze",
         json={"resource_ids": [first.id, second.id], "force": True},
-    )
+    ).json()
+    run_analysis_task(created["id"])
 
-    assert response.status_code == 200
-    assert response.json()["analyzed_resource_ids"] == [first.id]
-    assert response.json()["failures"] == [{"resource_id": second.id, "error": "analysis failed"}]
-    db_session.refresh(first)
+    failed_detail = api_client.get(f"/api/v1/local-resources/analysis-tasks/{created['id']}").json()
+    assert failed_detail["status"] == "completed"
+    assert failed_detail["failures"] == [{"resource_id": second.id, "error": "analysis failed"}]
     db_session.refresh(second)
-    assert first.video_codec == "hevc"
     assert second.video_codec is None
 
+    retry_response = api_client.post(
+        f"/api/v1/local-resources/analysis-tasks/{created['id']}/retry"
+    )
+    assert retry_response.status_code == 202
+    retry = retry_response.json()
+    assert retry["retry_of_task_id"] == created["id"]
+    assert retry["resource_ids"] == [second.id]
+    assert retry["force"] is True
+    assert retry["status"] == "waiting"
 
-@pytest.mark.parametrize(
-    "resource_ids",
-    [[], [0], list(range(1, 102))],
-)
+
+def test_analysis_task_not_retryable_and_not_found(
+    api_client: TestClient,
+    db_session: Session,
+    api_assertions: ApiAssertions,
+):
+    task = AnalysisTask(
+        resource_ids=[1],
+        force=False,
+        status=AnalysisTaskStatus.COMPLETED,
+        total_resources=1,
+        processed_resources=1,
+        progress=100,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    api_assertions.assert_error(
+        api_client.post(f"/api/v1/local-resources/analysis-tasks/{task.id}/retry"),
+        status_code=409,
+        code="ANALYSIS_TASK_NOT_RETRYABLE",
+    )
+    api_assertions.assert_error(
+        api_client.get("/api/v1/local-resources/analysis-tasks/999999"),
+        status_code=404,
+        code="ANALYSIS_TASK_NOT_FOUND",
+    )
+
+
+@pytest.mark.parametrize("resource_ids", [[], [0], list(range(1, 102))])
 def test_batch_analysis_validates_resource_ids(
     api_client: TestClient,
     resource_ids,

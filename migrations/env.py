@@ -5,6 +5,7 @@ from videocenter.core.config import get_settings
 from videocenter.core.database import Base
 from videocenter.core.logging import configure_logging
 from videocenter.models import (  # noqa: F401
+    AnalysisTask,
     DownloadTask,
     Episode,
     LocalResource,

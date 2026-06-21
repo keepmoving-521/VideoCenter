@@ -1,3 +1,4 @@
+from videocenter.models.analysis import AnalysisTask, AnalysisTaskStatus
 from videocenter.models.download import DownloadTask
 from videocenter.models.history import WatchHistory
 from videocenter.models.media import (
@@ -14,6 +15,8 @@ from videocenter.models.notification import Notification, NotificationType
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 
 __all__ = [
+    "AnalysisTask",
+    "AnalysisTaskStatus",
     "DownloadTask",
     "Episode",
     "LocalResource",
