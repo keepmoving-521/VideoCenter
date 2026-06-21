@@ -26,6 +26,7 @@ from videocenter.services.downloaders import (
 )
 from videocenter.services.downloaders.base import normalize_download_url
 from videocenter.services.notifications import create_download_completed_notification
+from videocenter.services.video_filename import parse_video_filename
 
 _default_downloader = HttpDirectDownloader()
 _yt_dlp_downloader = YtDlpDownloader()
@@ -327,6 +328,12 @@ def register_local_resource(
     resource.mime_type = result.mime_type or "application/octet-stream"
     resource.is_available = True
     resource.missing_at = None
+    parsed = parse_video_filename(result.target_path.name)
+    resource.detected_media_type = parsed.media_type.value
+    resource.parsed_title = parsed.title
+    resource.parsed_release_year = parsed.release_year
+    resource.parsed_season_number = parsed.season_number
+    resource.parsed_episode_number = parsed.episode_number
     if result.target_path.exists():
         resource.modified_at_ns = result.target_path.stat().st_mtime_ns
     return resource

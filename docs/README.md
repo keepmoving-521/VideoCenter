@@ -52,5 +52,6 @@
 - [F01：媒体目录配置模型](media-directory-configuration.md)
 - [F04～F06：后台扫描、扫描进度与增量扫描](background-incremental-media-scan.md)
 - [F07～F08：新增与删除视频文件检测](scan-new-deleted-video-detection.md)
+- [F09～F11：视频文件类型、文件名与季集识别](video-filename-recognition.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

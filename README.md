@@ -201,6 +201,9 @@ python -m pytest
 新增文件登记、缺失标记和文件恢复规则请参阅
 [扫描差异检测文档](docs/scan-new-deleted-video-detection.md)。
 
+视频文件类型、标题、年份以及电视剧季集编号识别请参阅
+[视频文件名识别文档](docs/video-filename-recognition.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

@@ -12,6 +12,7 @@ from videocenter.core.database import SessionLocal
 from videocenter.models.media import LocalResource
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 from videocenter.services.downloads import update_media_download_status
+from videocenter.services.video_filename import ParsedVideoFilename, parse_video_filename
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".ts"}
 logger = logging.getLogger(__name__)
@@ -145,22 +146,24 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
         and resource.modified_at_ns == stat.st_mtime_ns
         and (task.media_id is None or resource.media_id == task.media_id)
         and resource.is_available
+        and resource.parsed_title is not None
     ):
         task.skipped_files += 1
         return resource.media_id
 
     mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    parsed = parse_video_filename(path.name)
     if resource is None:
-        db.add(
-            LocalResource(
-                media_id=task.media_id,
-                file_path=normalized,
-                file_name=path.name,
-                file_size=stat.st_size,
-                mime_type=mime_type,
-                modified_at_ns=stat.st_mtime_ns,
-            )
+        resource = LocalResource(
+            media_id=task.media_id,
+            file_path=normalized,
+            file_name=path.name,
+            file_size=stat.st_size,
+            mime_type=mime_type,
+            modified_at_ns=stat.st_mtime_ns,
         )
+        _apply_parsed_filename(resource, parsed)
+        db.add(resource)
         task.added_files += 1
         return task.media_id
 
@@ -171,6 +174,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     resource.modified_at_ns = stat.st_mtime_ns
     resource.is_available = True
     resource.missing_at = None
+    _apply_parsed_filename(resource, parsed)
     if task.media_id is not None:
         resource.media_id = task.media_id
     if was_missing:
@@ -178,6 +182,17 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     else:
         task.updated_files += 1
     return resource.media_id
+
+
+def _apply_parsed_filename(
+    resource: LocalResource,
+    parsed: ParsedVideoFilename,
+) -> None:
+    resource.detected_media_type = parsed.media_type.value
+    resource.parsed_title = parsed.title
+    resource.parsed_release_year = parsed.release_year
+    resource.parsed_season_number = parsed.season_number
+    resource.parsed_episode_number = parsed.episode_number
 
 
 def _mark_missing_resources(

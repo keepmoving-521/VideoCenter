@@ -278,6 +278,11 @@ class LocalResourceRead(BaseModel):
     mime_type: str
     duration_seconds: float | None
     modified_at_ns: int | None
+    detected_media_type: MediaType | None
+    parsed_title: str | None
+    parsed_release_year: int | None
+    parsed_season_number: int | None
+    parsed_episode_number: int | None
     is_available: bool
     missing_at: datetime | None
     created_at: datetime

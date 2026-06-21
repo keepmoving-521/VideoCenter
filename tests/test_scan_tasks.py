@@ -100,6 +100,48 @@ def test_incremental_scan_skips_unchanged_and_updates_changed_files(
         root.rmdir()
 
 
+def test_scan_recognizes_movie_and_series_file_names(
+    api_client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    root = Path("data/media/scan-filenames").resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    movie = root / "The.Matrix.1999.1080p.BluRay.mkv"
+    episode = root / "The.Show.S02E07.720p.WEB-DL.mp4"
+    movie.write_bytes(b"movie")
+    episode.write_bytes(b"episode")
+    monkeypatch.setattr(
+        "videocenter.api.routes.local_resources.start_scan_task",
+        lambda task_id: None,
+    )
+
+    try:
+        task_id = api_client.post(
+            "/api/v1/local-resources/scan",
+            json={"path": str(root)},
+        ).json()["id"]
+        run_scan_task(task_id)
+
+        resources = {
+            item["file_name"]: item for item in api_client.get("/api/v1/local-resources").json()
+        }
+        movie_resource = resources[movie.name]
+        assert movie_resource["detected_media_type"] == "movie"
+        assert movie_resource["parsed_title"] == "The Matrix"
+        assert movie_resource["parsed_release_year"] == 1999
+
+        episode_resource = resources[episode.name]
+        assert episode_resource["detected_media_type"] == "series"
+        assert episode_resource["parsed_title"] == "The Show"
+        assert episode_resource["parsed_season_number"] == 2
+        assert episode_resource["parsed_episode_number"] == 7
+    finally:
+        movie.unlink(missing_ok=True)
+        episode.unlink(missing_ok=True)
+        root.rmdir()
+
+
 def test_scan_detects_deleted_and_restored_video_files(
     api_client: TestClient,
     db_session: Session,
