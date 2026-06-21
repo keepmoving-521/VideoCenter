@@ -14,6 +14,7 @@ from videocenter.schemas.media_directory import (
 )
 from videocenter.services.media_directories import (
     ensure_media_directory_unique,
+    promote_default_media_directory,
     resolve_media_directory_path,
     set_default_media_directory,
 )
@@ -29,6 +30,17 @@ def list_media_directories(db: Session = Depends(get_db)):
             MediaDirectory.id,
         )
     ).all()
+
+
+@router.get("/{directory_id}", response_model=MediaDirectoryRead)
+def get_media_directory(
+    directory_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    directory = db.get(MediaDirectory, directory_id)
+    if directory is None:
+        raise NotFoundError("媒体目录不存在", code="MEDIA_DIRECTORY_NOT_FOUND")
+    return directory
 
 
 @router.post(
@@ -99,6 +111,11 @@ def update_media_directory(
             "默认媒体目录不能直接取消默认状态，请将其他目录设为默认",
             code="MEDIA_DIRECTORY_DEFAULT_REQUIRED",
         )
+    if values.get("is_enabled") is False and directory.is_default:
+        raise ConflictError(
+            "默认媒体目录不能直接停用，请先将其他目录设为默认",
+            code="MEDIA_DIRECTORY_DEFAULT_REQUIRED",
+        )
     for field, value in values.items():
         setattr(directory, field, value)
     if values.get("is_default"):
@@ -106,3 +123,17 @@ def update_media_directory(
     db.commit()
     db.refresh(directory)
     return directory
+
+
+@router.delete("/{directory_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_media_directory(
+    directory_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+) -> None:
+    directory = db.get(MediaDirectory, directory_id)
+    if directory is None:
+        raise NotFoundError("媒体目录不存在", code="MEDIA_DIRECTORY_NOT_FOUND")
+    if directory.is_default:
+        promote_default_media_directory(db, exclude_id=directory.id)
+    db.delete(directory)
+    db.commit()

@@ -19,6 +19,12 @@ class MediaDirectoryCreate(ApiRequestModel):
             raise ValueError("媒体目录路径不能包含空字符")
         return value
 
+    @model_validator(mode="after")
+    def require_enabled_default(self) -> "MediaDirectoryCreate":
+        if self.is_default and not self.is_enabled:
+            raise ValueError("默认媒体目录必须处于启用状态")
+        return self
+
 
 class MediaDirectoryUpdate(ApiRequestModel):
     name: ShortText | None = Field(default=None, max_length=100)

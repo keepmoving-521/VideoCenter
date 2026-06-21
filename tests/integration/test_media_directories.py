@@ -48,6 +48,12 @@ def test_media_directory_create_list_and_update(
         )
         assert second["is_default"] is True
 
+        detail = api_assertions.assert_status(
+            api_client.get(f"/api/v1/media-directories/{second['id']}"),
+            200,
+        )
+        assert detail == second
+
         directories = api_client.get("/api/v1/media-directories").json()
         assert [item["id"] for item in directories] == [second["id"], first["id"]]
         assert directories[1]["is_default"] is False
@@ -66,6 +72,22 @@ def test_media_directory_create_list_and_update(
         assert updated["name"] == "Archive Library"
         assert updated["is_enabled"] is False
         assert updated["auto_scan"] is False
+
+        api_assertions.assert_status(
+            api_client.delete(f"/api/v1/media-directories/{second['id']}"),
+            204,
+        )
+        remaining = api_client.get("/api/v1/media-directories").json()
+        assert len(remaining) == 1
+        assert remaining[0]["id"] == first["id"]
+        assert remaining[0]["is_default"] is True
+        assert remaining[0]["is_enabled"] is True
+
+        api_assertions.assert_status(
+            api_client.delete(f"/api/v1/media-directories/{first['id']}"),
+            204,
+        )
+        assert api_client.get("/api/v1/media-directories").json() == []
     finally:
         second_path.rmdir()
         first_path.rmdir()
@@ -117,6 +139,14 @@ def test_media_directory_rejects_duplicates_and_unsafe_paths(
             status_code=409,
             code="MEDIA_DIRECTORY_DEFAULT_REQUIRED",
         )
+        api_assertions.assert_error(
+            api_client.patch(
+                f"/api/v1/media-directories/{created['id']}",
+                json={"is_enabled": False},
+            ),
+            status_code=409,
+            code="MEDIA_DIRECTORY_DEFAULT_REQUIRED",
+        )
     finally:
         directory_path.rmdir()
 
@@ -133,3 +163,51 @@ def test_media_directory_not_found(
         status_code=404,
         code="MEDIA_DIRECTORY_NOT_FOUND",
     )
+    api_assertions.assert_error(
+        api_client.get("/api/v1/media-directories/999999"),
+        status_code=404,
+        code="MEDIA_DIRECTORY_NOT_FOUND",
+    )
+    api_assertions.assert_error(
+        api_client.delete("/api/v1/media-directories/999999"),
+        status_code=404,
+        code="MEDIA_DIRECTORY_NOT_FOUND",
+    )
+
+
+def test_multiple_media_directories_are_independent(
+    api_client: TestClient,
+):
+    media_root = Path("data/media").resolve()
+    paths = [media_root / f"multi-{index}" for index in range(3)]
+    for path in paths:
+        path.mkdir(parents=True, exist_ok=True)
+
+    try:
+        created = [
+            api_client.post(
+                "/api/v1/media-directories",
+                json={
+                    "name": f"Library {index}",
+                    "path": str(path),
+                    "auto_scan": index != 2,
+                },
+            ).json()
+            for index, path in enumerate(paths)
+        ]
+
+        assert len(api_client.get("/api/v1/media-directories").json()) == 3
+        assert sum(item["is_default"] for item in created) == 1
+        assert [item["auto_scan"] for item in created] == [True, True, False]
+
+        promoted = api_client.patch(
+            f"/api/v1/media-directories/{created[2]['id']}",
+            json={"is_default": True},
+        ).json()
+        assert promoted["is_default"] is True
+        directories = api_client.get("/api/v1/media-directories").json()
+        assert sum(item["is_default"] for item in directories) == 1
+        assert directories[0]["id"] == created[2]["id"]
+    finally:
+        for path in reversed(paths):
+            path.rmdir()

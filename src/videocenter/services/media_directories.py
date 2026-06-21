@@ -46,4 +46,24 @@ def set_default_media_directory(db: Session, directory: MediaDirectory) -> None:
     db.execute(
         update(MediaDirectory).where(MediaDirectory.id != directory.id).values(is_default=False)
     )
+    directory.is_enabled = True
     directory.is_default = True
+
+
+def promote_default_media_directory(
+    db: Session,
+    *,
+    exclude_id: int,
+) -> MediaDirectory | None:
+    replacement = db.scalar(
+        select(MediaDirectory)
+        .where(MediaDirectory.id != exclude_id)
+        .order_by(
+            MediaDirectory.is_enabled.desc(),
+            MediaDirectory.id,
+        )
+        .limit(1)
+    )
+    if replacement is not None:
+        set_default_media_directory(db, replacement)
+    return replacement
