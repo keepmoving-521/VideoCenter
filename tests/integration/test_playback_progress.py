@@ -26,6 +26,7 @@ def test_save_playback_progress_creates_and_updates_single_history(
     assert created.status_code == 200
     assert created.json()["media_id"] == media.id
     assert created.json()["resource_id"] == resource.id
+    assert created.json()["episode_id"] is None
     assert created.json()["position_seconds"] == 30
     assert created.json()["duration_seconds"] == 120
     assert created.json()["is_completed"] is False
@@ -113,6 +114,7 @@ def test_get_single_media_playback_progress(
         "id": history.id,
         "media_id": media.id,
         "resource_id": resource.id,
+        "episode_id": None,
         "position_seconds": 48.5,
         "duration_seconds": 120,
         "is_completed": False,
@@ -348,4 +350,143 @@ def test_manual_watch_state_requires_existing_media(
         api_client.put(f"/api/v1/history/999999/{action}"),
         status_code=404,
         code="MEDIA_NOT_FOUND",
+    )
+
+
+def test_save_progress_records_episode_explicitly(
+    api_client: TestClient,
+    model_factory,
+):
+    media = model_factory.media(media_type="series")
+    season = model_factory.season(media=media, season_number=1)
+    episode = model_factory.episode(season=season, episode_number=3)
+    resource = model_factory.local_resource(media=media, duration_seconds=100)
+
+    payload = api_client.put(
+        f"/api/v1/stream/{resource.id}/progress",
+        json={"episode_id": episode.id, "position_seconds": 20},
+    ).json()
+
+    assert payload["episode_id"] == episode.id
+    recent = api_client.get(f"/api/v1/history/{media.id}/recent-episode").json()
+    assert recent["id"] == episode.id
+    assert recent["season_number"] == 1
+    assert recent["episode_number"] == 3
+    assert recent["resource_id"] == resource.id
+    assert recent["stream_url"] == f"/api/v1/stream/{resource.id}"
+
+
+def test_save_progress_infers_episode_from_resource_filename_metadata(
+    api_client: TestClient,
+    model_factory,
+):
+    media = model_factory.media(media_type="series")
+    season = model_factory.season(media=media, season_number=2)
+    episode = model_factory.episode(season=season, episode_number=5)
+    resource = model_factory.local_resource(
+        media=media,
+        parsed_season_number=2,
+        parsed_episode_number=5,
+        duration_seconds=100,
+    )
+
+    payload = api_client.put(
+        f"/api/v1/stream/{resource.id}/progress",
+        json={"position_seconds": 20},
+    ).json()
+
+    assert payload["episode_id"] == episode.id
+
+
+def test_save_progress_rejects_episode_from_another_media(
+    api_client: TestClient,
+    api_assertions,
+    model_factory,
+):
+    media = model_factory.media(media_type="series")
+    resource = model_factory.local_resource(media=media)
+    another_media = model_factory.media(media_type="series")
+    season = model_factory.season(media=another_media)
+    episode = model_factory.episode(season=season)
+
+    api_assertions.assert_error(
+        api_client.put(
+            f"/api/v1/stream/{resource.id}/progress",
+            json={"episode_id": episode.id, "position_seconds": 10},
+        ),
+        status_code=400,
+        code="EPISODE_MEDIA_MISMATCH",
+    )
+
+
+def test_recommend_next_episode_in_same_season_with_playable_resource(
+    api_client: TestClient,
+    model_factory,
+):
+    media = model_factory.media(media_type="series")
+    season = model_factory.season(media=media, season_number=1)
+    current = model_factory.episode(season=season, episode_number=1, title="Episode 1")
+    next_episode = model_factory.episode(
+        season=season,
+        episode_number=2,
+        title="Episode 2",
+        duration_minutes=45,
+    )
+    model_factory.watch_history(media=media, episode_id=current.id)
+    resource = model_factory.local_resource(
+        media=media,
+        parsed_season_number=1,
+        parsed_episode_number=2,
+    )
+
+    payload = api_client.get(f"/api/v1/history/{media.id}/next-episode").json()
+
+    assert payload["current_episode_id"] == current.id
+    assert payload["id"] == next_episode.id
+    assert payload["season_number"] == 1
+    assert payload["episode_number"] == 2
+    assert payload["resource_id"] == resource.id
+    assert payload["playable"] is True
+    assert payload["stream_url"] == f"/api/v1/stream/{resource.id}"
+
+
+def test_recommend_next_episode_crosses_season_boundary(
+    api_client: TestClient,
+    model_factory,
+):
+    media = model_factory.media(media_type="series")
+    season_one = model_factory.season(media=media, season_number=1)
+    current = model_factory.episode(season=season_one, episode_number=10)
+    season_two = model_factory.season(media=media, season_number=2)
+    next_episode = model_factory.episode(season=season_two, episode_number=1)
+    model_factory.watch_history(media=media, episode_id=current.id)
+
+    payload = api_client.get(f"/api/v1/history/{media.id}/next-episode").json()
+
+    assert payload["id"] == next_episode.id
+    assert payload["season_number"] == 2
+    assert payload["episode_number"] == 1
+    assert payload["playable"] is False
+    assert payload["resource_id"] is None
+
+
+def test_recommend_next_episode_handles_missing_recent_and_final_episode(
+    api_client: TestClient,
+    api_assertions,
+    model_factory,
+):
+    media = model_factory.media(media_type="series")
+    season = model_factory.season(media=media)
+    final_episode = model_factory.episode(season=season)
+
+    api_assertions.assert_error(
+        api_client.get(f"/api/v1/history/{media.id}/next-episode"),
+        status_code=404,
+        code="RECENT_EPISODE_NOT_FOUND",
+    )
+    model_factory.watch_history(media=media, episode_id=final_episode.id)
+    api_assertions.assert_error(
+        api_client.get(f"/api/v1/history/{media.id}/next-episode"),
+        status_code=404,
+        code="NEXT_EPISODE_NOT_FOUND",
     )

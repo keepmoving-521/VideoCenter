@@ -73,5 +73,6 @@
 - [H02：查询单个影片播放进度](playback-progress-query.md)
 - [H03～H04：继续观看与最近观看列表](playback-history-lists.md)
 - [H05～H07：观看完成状态与手动标记](watch-completion-state.md)
+- [H08～H09：最近观看分集与下一集推荐](recent-and-next-episode.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

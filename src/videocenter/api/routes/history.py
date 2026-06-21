@@ -8,13 +8,15 @@ from sqlalchemy.orm import Session
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import BadRequestError, NotFoundError
 from videocenter.models.history import WatchHistory
-from videocenter.models.media import LocalResource, Media
+from videocenter.models.media import Episode, LocalResource, Media, Season
 from videocenter.schemas.history import (
     HistoryListItem,
     HistoryMediaSummary,
     HistoryPage,
     HistoryRead,
     HistoryUpsert,
+    NextEpisodeRead,
+    WatchedEpisodeRead,
 )
 from videocenter.services.watch_history import save_watch_history
 
@@ -95,6 +97,20 @@ def save_history(payload: HistoryUpsert, db: Session = Depends(get_db)):
                 "本地资源不属于指定影视条目",
                 code="RESOURCE_MEDIA_MISMATCH",
             )
+    if payload.episode_id is not None:
+        episode = db.scalar(
+            select(Episode)
+            .join(Season, Season.id == Episode.season_id)
+            .where(
+                Episode.id == payload.episode_id,
+                Season.media_id == payload.media_id,
+            )
+        )
+        if episode is None:
+            raise BadRequestError(
+                "分集不存在或不属于指定影视条目",
+                code="EPISODE_MEDIA_MISMATCH",
+            )
     return save_watch_history(db, **payload.model_dump())
 
 
@@ -160,6 +176,7 @@ def mark_media_completed(
         db,
         media_id=media_id,
         resource_id=resource.id if resource is not None else None,
+        episode_id=history.episode_id if history is not None else None,
         position_seconds=position_seconds,
         duration_seconds=duration_seconds,
     )
@@ -169,6 +186,103 @@ def mark_media_completed(
         db.commit()
         db.refresh(saved)
     return saved
+
+
+@router.get("/{media_id}/recent-episode", response_model=WatchedEpisodeRead)
+def get_recent_watched_episode(
+    media_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    if db.get(Media, media_id) is None:
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
+    row = db.execute(
+        select(WatchHistory, Episode, Season)
+        .join(Episode, Episode.id == WatchHistory.episode_id)
+        .join(Season, Season.id == Episode.season_id)
+        .where(WatchHistory.media_id == media_id)
+    ).one_or_none()
+    if row is None:
+        raise NotFoundError("尚未记录最近观看分集", code="RECENT_EPISODE_NOT_FOUND")
+    history, episode, season = row
+    return WatchedEpisodeRead(
+        id=episode.id,
+        media_id=media_id,
+        season_id=season.id,
+        season_number=season.season_number,
+        episode_number=episode.episode_number,
+        title=episode.title,
+        thumbnail_url=episode.thumbnail_url,
+        resource_id=history.resource_id,
+        stream_url=(
+            f"/api/v1/stream/{history.resource_id}" if history.resource_id is not None else None
+        ),
+        position_seconds=history.position_seconds,
+        duration_seconds=history.duration_seconds,
+        is_completed=history.is_completed,
+        watched_at=history.watched_at,
+    )
+
+
+@router.get("/{media_id}/next-episode", response_model=NextEpisodeRead)
+def recommend_next_episode(
+    media_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    if db.get(Media, media_id) is None:
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
+    current = db.execute(
+        select(Episode, Season)
+        .join(Season, Season.id == Episode.season_id)
+        .join(WatchHistory, WatchHistory.episode_id == Episode.id)
+        .where(WatchHistory.media_id == media_id)
+    ).one_or_none()
+    if current is None:
+        raise NotFoundError("尚未记录最近观看分集", code="RECENT_EPISODE_NOT_FOUND")
+    current_episode, current_season = current
+    next_row = db.execute(
+        select(Episode, Season)
+        .join(Season, Season.id == Episode.season_id)
+        .where(
+            Season.media_id == media_id,
+            (
+                (Season.season_number > current_season.season_number)
+                | (
+                    (Season.season_number == current_season.season_number)
+                    & (Episode.episode_number > current_episode.episode_number)
+                )
+            ),
+        )
+        .order_by(Season.season_number, Episode.episode_number)
+        .limit(1)
+    ).one_or_none()
+    if next_row is None:
+        raise NotFoundError("没有可推荐的下一集", code="NEXT_EPISODE_NOT_FOUND")
+    episode, season = next_row
+    resource = db.scalar(
+        select(LocalResource)
+        .where(
+            LocalResource.media_id == media_id,
+            LocalResource.parsed_season_number == season.season_number,
+            LocalResource.parsed_episode_number == episode.episode_number,
+            LocalResource.is_available.is_(True),
+        )
+        .order_by(LocalResource.id)
+    )
+    return NextEpisodeRead(
+        media_id=media_id,
+        current_episode_id=current_episode.id,
+        id=episode.id,
+        season_id=season.id,
+        season_number=season.season_number,
+        episode_number=episode.episode_number,
+        title=episode.title,
+        description=episode.description,
+        duration_minutes=episode.duration_minutes,
+        thumbnail_url=episode.thumbnail_url,
+        resource_id=resource.id if resource is not None else None,
+        playable=resource is not None,
+        stream_url=f"/api/v1/stream/{resource.id}" if resource is not None else None,
+    )
 
 
 @router.put("/{media_id}/unwatched", status_code=204)

@@ -20,6 +20,7 @@ def save_watch_history(
     *,
     media_id: int,
     resource_id: int | None,
+    episode_id: int | None = None,
     position_seconds: float,
     duration_seconds: float | None,
 ) -> WatchHistory:
@@ -29,6 +30,7 @@ def save_watch_history(
     is_completed = automatically_completed or bool(history and history.is_completed)
     values = {
         "resource_id": resource_id,
+        "episode_id": episode_id,
         "position_seconds": position_seconds,
         "duration_seconds": duration_seconds,
         "is_completed": is_completed,

@@ -9,6 +9,7 @@ from videocenter.schemas.common import ApiRequestModel, PositiveId
 class HistoryUpsert(ApiRequestModel):
     media_id: PositiveId
     resource_id: PositiveId | None = None
+    episode_id: PositiveId | None = None
     position_seconds: float = Field(ge=0)
     duration_seconds: float | None = Field(default=None, ge=0)
 
@@ -29,6 +30,7 @@ class HistoryRead(HistoryUpsert):
 
 
 class PlaybackProgressUpdate(ApiRequestModel):
+    episode_id: PositiveId | None = None
     position_seconds: float = Field(ge=0)
     duration_seconds: float | None = Field(default=None, gt=0)
 
@@ -59,3 +61,35 @@ class HistoryPage(BaseModel):
     total_pages: int
     has_next: bool
     has_previous: bool
+
+
+class WatchedEpisodeRead(BaseModel):
+    id: int
+    media_id: int
+    season_id: int
+    season_number: int
+    episode_number: int
+    title: str
+    thumbnail_url: str | None
+    resource_id: int | None
+    stream_url: str | None
+    position_seconds: float
+    duration_seconds: float | None
+    is_completed: bool
+    watched_at: datetime
+
+
+class NextEpisodeRead(BaseModel):
+    media_id: int
+    current_episode_id: int
+    id: int
+    season_id: int
+    season_number: int
+    episode_number: int
+    title: str
+    description: str | None
+    duration_minutes: int | None
+    thumbnail_url: str | None
+    resource_id: int | None
+    playable: bool
+    stream_url: str | None

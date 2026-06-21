@@ -7,12 +7,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Response
 from fastapi import Path as ApiPath
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import AppException, ConflictError, NotFoundError
 from videocenter.models.hls import HlsTask
-from videocenter.models.media import LocalResource
+from videocenter.models.media import Episode, LocalResource, Season
 from videocenter.schemas.history import HistoryRead, PlaybackProgressUpdate
 from videocenter.schemas.hls import (
     HlsCacheCleanupRequest,
@@ -274,10 +275,37 @@ def save_playback_progress(
             code="PLAYBACK_POSITION_EXCEEDS_DURATION",
             status_code=422,
         )
+    episode_id = payload.episode_id
+    if episode_id is not None:
+        episode = db.scalar(
+            select(Episode)
+            .join(Season, Season.id == Episode.season_id)
+            .where(
+                Episode.id == episode_id,
+                Season.media_id == resource.media_id,
+            )
+        )
+        if episode is None:
+            raise AppException(
+                "分集不存在或不属于当前影视条目",
+                code="EPISODE_MEDIA_MISMATCH",
+                status_code=400,
+            )
+    else:
+        episode_id = db.scalar(
+            select(Episode.id)
+            .join(Season, Season.id == Episode.season_id)
+            .where(
+                Season.media_id == resource.media_id,
+                Season.season_number == resource.parsed_season_number,
+                Episode.episode_number == resource.parsed_episode_number,
+            )
+        )
     return save_watch_history(
         db,
         media_id=resource.media_id,
         resource_id=resource.id,
+        episode_id=episode_id,
         position_seconds=payload.position_seconds,
         duration_seconds=duration_seconds,
     )

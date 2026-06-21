@@ -13,6 +13,10 @@ class WatchHistory(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     media_id: Mapped[int] = mapped_column(ForeignKey("media.id"), index=True)
     resource_id: Mapped[int | None] = mapped_column(ForeignKey("local_resources.id"))
+    episode_id: Mapped[int | None] = mapped_column(
+        ForeignKey("episodes.id", ondelete="SET NULL"),
+        index=True,
+    )
     position_seconds: Mapped[float] = mapped_column(Float, default=0)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     is_completed: Mapped[bool] = mapped_column(
