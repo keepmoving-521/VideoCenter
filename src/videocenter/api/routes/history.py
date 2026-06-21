@@ -1,7 +1,8 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
@@ -32,10 +33,7 @@ def _history_page(
         filters.extend(
             [
                 WatchHistory.position_seconds > 0,
-                or_(
-                    WatchHistory.duration_seconds.is_(None),
-                    WatchHistory.position_seconds < WatchHistory.duration_seconds,
-                ),
+                WatchHistory.is_completed.is_(False),
             ]
         )
     total = (
@@ -126,6 +124,64 @@ def list_recently_watched(
         page_size=page_size,
         continue_watching_only=False,
     )
+
+
+@router.put("/{media_id}/completed", response_model=HistoryRead)
+def mark_media_completed(
+    media_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    media = db.get(Media, media_id)
+    if media is None:
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
+    history = db.scalar(select(WatchHistory).where(WatchHistory.media_id == media_id))
+    resource = (
+        db.get(LocalResource, history.resource_id)
+        if history is not None and history.resource_id is not None
+        else db.scalar(
+            select(LocalResource)
+            .where(LocalResource.media_id == media_id)
+            .order_by(LocalResource.id)
+        )
+    )
+    duration_seconds = (history.duration_seconds if history is not None else None) or (
+        resource.duration_seconds if resource is not None else None
+    )
+    if duration_seconds is None and media.duration_minutes is not None:
+        duration_seconds = media.duration_minutes * 60
+    position_seconds = (
+        duration_seconds
+        if duration_seconds is not None
+        else history.position_seconds
+        if history is not None
+        else 0
+    )
+    saved = save_watch_history(
+        db,
+        media_id=media_id,
+        resource_id=resource.id if resource is not None else None,
+        position_seconds=position_seconds,
+        duration_seconds=duration_seconds,
+    )
+    if not saved.is_completed:
+        saved.is_completed = True
+        saved.completed_at = datetime.now()
+        db.commit()
+        db.refresh(saved)
+    return saved
+
+
+@router.put("/{media_id}/unwatched", status_code=204)
+def mark_media_unwatched(
+    media_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+) -> None:
+    if db.get(Media, media_id) is None:
+        raise NotFoundError("影视条目不存在", code="MEDIA_NOT_FOUND")
+    history = db.scalar(select(WatchHistory).where(WatchHistory.media_id == media_id))
+    if history is not None:
+        db.delete(history)
+        db.commit()
 
 
 @router.get("/{media_id}", response_model=HistoryRead)

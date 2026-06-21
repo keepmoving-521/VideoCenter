@@ -72,5 +72,6 @@
 - [H01：保存视频播放进度](playback-progress-saving.md)
 - [H02：查询单个影片播放进度](playback-progress-query.md)
 - [H03～H04：继续观看与最近观看列表](playback-history-lists.md)
+- [H05～H07：观看完成状态与手动标记](watch-completion-state.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

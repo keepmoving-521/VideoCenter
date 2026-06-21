@@ -28,6 +28,8 @@ def test_save_playback_progress_creates_and_updates_single_history(
     assert created.json()["resource_id"] == resource.id
     assert created.json()["position_seconds"] == 30
     assert created.json()["duration_seconds"] == 120
+    assert created.json()["is_completed"] is False
+    assert created.json()["completed_at"] is None
 
     updated = api_client.put(
         f"/api/v1/stream/{resource.id}/progress",
@@ -113,6 +115,8 @@ def test_get_single_media_playback_progress(
         "resource_id": resource.id,
         "position_seconds": 48.5,
         "duration_seconds": 120,
+        "is_completed": False,
+        "completed_at": None,
         "watched_at": history.watched_at.isoformat(),
     }
 
@@ -172,6 +176,8 @@ def test_continue_watching_returns_only_started_unfinished_media(
         media=completed_media,
         position_seconds=100,
         duration_seconds=100,
+        is_completed=True,
+        completed_at=now + timedelta(minutes=1),
         watched_at=now + timedelta(minutes=1),
     )
     not_started_media = model_factory.media(title="Not started")
@@ -245,4 +251,101 @@ def test_playback_history_lists_validate_pagination(
     api_assertions.assert_validation_error(
         api_client.get(path, params={"page_size": 201}),
         ["query", "page_size"],
+    )
+
+
+@pytest.mark.parametrize(
+    ("position_seconds", "expected_completed"),
+    [
+        (94.9, False),
+        (95, True),
+        (100, True),
+    ],
+)
+def test_save_progress_automatically_detects_completion(
+    api_client: TestClient,
+    model_factory,
+    position_seconds: float,
+    expected_completed: bool,
+):
+    media = model_factory.media()
+    resource = model_factory.local_resource(media=media, duration_seconds=100)
+
+    payload = api_client.put(
+        f"/api/v1/stream/{resource.id}/progress",
+        json={"position_seconds": position_seconds},
+    ).json()
+
+    assert payload["is_completed"] is expected_completed
+    assert (payload["completed_at"] is not None) is expected_completed
+
+
+def test_completed_progress_stays_completed_when_replayed(
+    api_client: TestClient,
+    model_factory,
+):
+    media = model_factory.media()
+    resource = model_factory.local_resource(media=media, duration_seconds=100)
+    api_client.put(
+        f"/api/v1/stream/{resource.id}/progress",
+        json={"position_seconds": 95},
+    )
+
+    replayed = api_client.put(
+        f"/api/v1/stream/{resource.id}/progress",
+        json={"position_seconds": 10},
+    ).json()
+
+    assert replayed["is_completed"] is True
+    assert replayed["completed_at"] is not None
+
+
+def test_manually_mark_media_completed(
+    api_client: TestClient,
+    model_factory,
+):
+    media = model_factory.media(duration_minutes=2)
+
+    payload = api_client.put(f"/api/v1/history/{media.id}/completed").json()
+
+    assert payload["media_id"] == media.id
+    assert payload["position_seconds"] == 120
+    assert payload["duration_seconds"] == 120
+    assert payload["is_completed"] is True
+    assert payload["completed_at"] is not None
+    assert api_client.get("/api/v1/history/continue-watching").json()["total"] == 0
+
+
+def test_manually_mark_media_unwatched_is_idempotent(
+    api_client: TestClient,
+    api_assertions,
+    model_factory,
+):
+    media = model_factory.media()
+    model_factory.watch_history(
+        media=media,
+        is_completed=True,
+        completed_at=datetime.now(),
+    )
+
+    assert api_client.put(f"/api/v1/history/{media.id}/unwatched").status_code == 204
+    assert api_client.put(f"/api/v1/history/{media.id}/unwatched").status_code == 204
+    api_assertions.assert_error(
+        api_client.get(f"/api/v1/history/{media.id}"),
+        status_code=404,
+        code="WATCH_HISTORY_NOT_FOUND",
+    )
+    assert api_client.get("/api/v1/history/recent").json()["total"] == 0
+
+
+@pytest.mark.parametrize("action", ["completed", "unwatched"])
+def test_manual_watch_state_requires_existing_media(
+    api_client: TestClient,
+    api_assertions,
+    action: str,
+):
+    api_assertions.assert_error(
+        api_client.put(f"/api/v1/history/999999/{action}"),
+        status_code=404,
+        code="MEDIA_NOT_FOUND",
     )

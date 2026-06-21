@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from videocenter.core.database import Base
@@ -15,6 +15,13 @@ class WatchHistory(Base):
     resource_id: Mapped[int | None] = mapped_column(ForeignKey("local_resources.id"))
     position_seconds: Mapped[float] = mapped_column(Float, default=0)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
+    is_completed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="0",
+        index=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
     watched_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), index=True
     )
