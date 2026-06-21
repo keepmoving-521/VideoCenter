@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from videocenter.models.media import MediaType
 from videocenter.schemas.common import ApiRequestModel, PositiveId
 
 
@@ -34,3 +35,25 @@ class PlaybackProgressUpdate(ApiRequestModel):
         if self.duration_seconds is not None and self.position_seconds > self.duration_seconds:
             raise ValueError("播放位置不能超过视频总时长")
         return self
+
+
+class HistoryMediaSummary(BaseModel):
+    id: int
+    title: str
+    media_type: MediaType
+    release_year: int | None
+    poster_url: str | None
+
+
+class HistoryListItem(HistoryRead):
+    media: HistoryMediaSummary
+
+
+class HistoryPage(BaseModel):
+    items: list[HistoryListItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool
