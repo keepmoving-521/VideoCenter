@@ -10,6 +10,7 @@ from videocenter.models.media_directory import MediaDirectory
 from videocenter.schemas.media_directory import (
     MediaDirectoryCreate,
     MediaDirectoryRead,
+    MediaDirectoryStorageRead,
     MediaDirectoryUpdate,
 )
 from videocenter.services.media_directories import (
@@ -18,6 +19,7 @@ from videocenter.services.media_directories import (
     resolve_media_directory_path,
     set_default_media_directory,
 )
+from videocenter.services.media_storage import get_media_directory_storage
 
 router = APIRouter()
 
@@ -30,6 +32,31 @@ def list_media_directories(db: Session = Depends(get_db)):
             MediaDirectory.id,
         )
     ).all()
+
+
+@router.get("/storage", response_model=list[MediaDirectoryStorageRead])
+def list_media_directory_storage(db: Session = Depends(get_db)):
+    directories = db.scalars(
+        select(MediaDirectory).order_by(
+            MediaDirectory.is_default.desc(),
+            MediaDirectory.id,
+        )
+    ).all()
+    return [get_media_directory_storage(db, directory) for directory in directories]
+
+
+@router.get(
+    "/{directory_id}/storage",
+    response_model=MediaDirectoryStorageRead,
+)
+def get_media_directory_storage_detail(
+    directory_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    directory = db.get(MediaDirectory, directory_id)
+    if directory is None:
+        raise NotFoundError("媒体目录不存在", code="MEDIA_DIRECTORY_NOT_FOUND")
+    return get_media_directory_storage(db, directory)
 
 
 @router.get("/{directory_id}", response_model=MediaDirectoryRead)

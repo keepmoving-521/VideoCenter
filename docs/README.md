@@ -56,5 +56,6 @@
 - [F12～F13：本地文件手动与批量关联](local-resource-associations.md)
 - [F14～F15：文件哈希与重复文件检测](local-file-hash-duplicates.md)
 - [F16～F18：文件重命名、安全删除与失效资源清理](local-file-operations.md)
+- [F19～F20：磁盘空间统计与媒体目录容量预警](media-directory-storage-warning.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

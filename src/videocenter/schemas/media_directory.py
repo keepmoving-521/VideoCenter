@@ -11,6 +11,8 @@ class MediaDirectoryCreate(ApiRequestModel):
     is_default: bool = False
     is_enabled: bool = True
     auto_scan: bool = True
+    capacity_warning_enabled: bool = True
+    capacity_warning_threshold_percent: int = Field(default=90, ge=1, le=100)
 
     @field_validator("path")
     @classmethod
@@ -32,6 +34,8 @@ class MediaDirectoryUpdate(ApiRequestModel):
     is_default: bool | None = None
     is_enabled: bool | None = None
     auto_scan: bool | None = None
+    capacity_warning_enabled: bool | None = None
+    capacity_warning_threshold_percent: int | None = Field(default=None, ge=1, le=100)
 
     @field_validator("path")
     @classmethod
@@ -40,7 +44,14 @@ class MediaDirectoryUpdate(ApiRequestModel):
             raise ValueError("媒体目录路径不能包含空字符")
         return value
 
-    @field_validator("name", "is_default", "is_enabled", "auto_scan")
+    @field_validator(
+        "name",
+        "is_default",
+        "is_enabled",
+        "auto_scan",
+        "capacity_warning_enabled",
+        "capacity_warning_threshold_percent",
+    )
     @classmethod
     def reject_null_values(cls, value):
         if value is None:
@@ -63,5 +74,22 @@ class MediaDirectoryRead(BaseModel):
     is_default: bool
     is_enabled: bool
     auto_scan: bool
+    capacity_warning_enabled: bool
+    capacity_warning_threshold_percent: int
     created_at: datetime
     updated_at: datetime
+
+
+class MediaDirectoryStorageRead(BaseModel):
+    directory_id: int
+    name: str
+    path: str
+    total_bytes: int
+    used_bytes: int
+    free_bytes: int
+    usage_percent: float
+    managed_file_count: int
+    managed_file_bytes: int
+    warning_enabled: bool
+    warning_threshold_percent: int
+    warning_triggered: bool

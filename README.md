@@ -213,6 +213,9 @@ python -m pytest
 文件重命名、回收站安全删除和失效资源记录清理请参阅
 [本地文件操作文档](docs/local-file-operations.md)。
 
+媒体目录的磁盘空间统计、使用率和容量预警配置请参阅
+[媒体目录容量预警文档](docs/media-directory-storage-warning.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

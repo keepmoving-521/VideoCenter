@@ -11,6 +11,8 @@
 | `is_default` | 是否为默认媒体目录 |
 | `is_enabled` | 是否启用 |
 | `auto_scan` | 后续自动扫描任务是否处理该目录 |
+| `capacity_warning_enabled` | 是否启用磁盘容量预警 |
+| `capacity_warning_threshold_percent` | 磁盘使用率预警阈值 |
 | `created_at` | 创建时间 |
 | `updated_at` | 更新时间 |
 
