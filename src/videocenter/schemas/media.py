@@ -278,6 +278,8 @@ class LocalResourceRead(BaseModel):
     mime_type: str
     duration_seconds: float | None
     modified_at_ns: int | None
+    is_available: bool
+    missing_at: datetime | None
     created_at: datetime
 
 

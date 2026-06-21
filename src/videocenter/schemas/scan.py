@@ -20,6 +20,8 @@ class ScanTaskRead(BaseModel):
     added_files: int
     updated_files: int
     skipped_files: int
+    missing_files: int
+    restored_files: int
     error_message: str | None
     created_at: datetime
     started_at: datetime | None

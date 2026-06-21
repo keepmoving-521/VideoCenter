@@ -11,6 +11,7 @@ from videocenter.core.config import get_settings
 from videocenter.core.database import SessionLocal
 from videocenter.models.media import LocalResource
 from videocenter.models.scan import ScanTask, ScanTaskStatus
+from videocenter.services.downloads import update_media_download_status
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".ts"}
 logger = logging.getLogger(__name__)
@@ -79,12 +80,26 @@ def run_scan_task(task_id: int) -> None:
             task.discovered_files = len(files)
             db.commit()
 
+            discovered_paths = {str(path.resolve()) for path in files}
+            affected_media_ids: set[int] = set()
             for index, path in enumerate(files, start=1):
-                _process_file(db, task, path)
+                media_id = _process_file(db, task, path)
+                if media_id is not None:
+                    affected_media_ids.add(media_id)
                 task.processed_files = index
                 task.progress = round(index / len(files) * 100, 2) if files else 100
                 db.commit()
 
+            affected_media_ids.update(
+                _mark_missing_resources(
+                    db,
+                    task=task,
+                    discovered_paths=discovered_paths,
+                )
+            )
+            db.flush()
+            for media_id in affected_media_ids:
+                update_media_download_status(db, media_id)
             task.progress = 100
             task.status = ScanTaskStatus.COMPLETED
             task.completed_at = datetime.now()
@@ -98,6 +113,8 @@ def run_scan_task(task_id: int) -> None:
                     "added_files": task.added_files,
                     "updated_files": task.updated_files,
                     "skipped_files": task.skipped_files,
+                    "missing_files": task.missing_files,
+                    "restored_files": task.restored_files,
                 },
             )
     except Exception as exc:
@@ -117,7 +134,7 @@ def run_scan_task(task_id: int) -> None:
             _scan_threads.pop(task_id, None)
 
 
-def _process_file(db: Session, task: ScanTask, path: Path) -> None:
+def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     normalized = str(path.resolve())
     stat = path.stat()
     resource = db.scalar(select(LocalResource).where(LocalResource.file_path == normalized))
@@ -127,9 +144,10 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> None:
         and resource.file_size == stat.st_size
         and resource.modified_at_ns == stat.st_mtime_ns
         and (task.media_id is None or resource.media_id == task.media_id)
+        and resource.is_available
     ):
         task.skipped_files += 1
-        return
+        return resource.media_id
 
     mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     if resource is None:
@@ -144,15 +162,51 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> None:
             )
         )
         task.added_files += 1
-        return
+        return task.media_id
 
+    was_missing = not resource.is_available
     resource.file_name = path.name
     resource.file_size = stat.st_size
     resource.mime_type = mime_type
     resource.modified_at_ns = stat.st_mtime_ns
+    resource.is_available = True
+    resource.missing_at = None
     if task.media_id is not None:
         resource.media_id = task.media_id
-    task.updated_files += 1
+    if was_missing:
+        task.restored_files += 1
+    else:
+        task.updated_files += 1
+    return resource.media_id
+
+
+def _mark_missing_resources(
+    db: Session,
+    *,
+    task: ScanTask,
+    discovered_paths: set[str],
+) -> set[int]:
+    directory = Path(task.path).resolve()
+    affected_media_ids: set[int] = set()
+    resources = db.scalars(select(LocalResource)).all()
+    for resource in resources:
+        resource_path = Path(resource.file_path)
+        try:
+            is_in_directory = resource_path.is_relative_to(directory)
+        except ValueError:
+            is_in_directory = False
+        if (
+            not is_in_directory
+            or resource.file_path in discovered_paths
+            or not resource.is_available
+        ):
+            continue
+        resource.is_available = False
+        resource.missing_at = datetime.now()
+        task.missing_files += 1
+        if resource.media_id is not None:
+            affected_media_ids.add(resource.media_id)
+    return affected_media_ids
 
 
 def restore_scan_tasks() -> int:
@@ -167,6 +221,8 @@ def restore_scan_tasks() -> int:
                 added_files=0,
                 updated_files=0,
                 skipped_files=0,
+                missing_files=0,
+                restored_files=0,
                 error_message=None,
                 started_at=None,
                 completed_at=None,

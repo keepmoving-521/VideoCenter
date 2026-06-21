@@ -325,6 +325,8 @@ def register_local_resource(
     resource.file_name = result.target_path.name
     resource.file_size = result.file_size
     resource.mime_type = result.mime_type or "application/octet-stream"
+    resource.is_available = True
+    resource.missing_at = None
     if result.target_path.exists():
         resource.modified_at_ns = result.target_path.stat().st_mtime_ns
     return resource
@@ -353,7 +355,12 @@ def update_media_download_status(db: Session, media_id: int | None) -> None:
     if media is None:
         return
     local_resource_id = db.scalar(
-        select(LocalResource.id).where(LocalResource.media_id == media_id).limit(1)
+        select(LocalResource.id)
+        .where(
+            LocalResource.media_id == media_id,
+            LocalResource.is_available.is_(True),
+        )
+        .limit(1)
     )
     if local_resource_id is not None:
         media.status = MediaStatus.AVAILABLE
@@ -372,9 +379,13 @@ def update_media_download_status(db: Session, media_id: int | None) -> None:
         )
         .limit(1)
     )
-    media.status = (
-        MediaStatus.DOWNLOADING if active_download_id is not None else MediaStatus.PENDING
+    if active_download_id is not None:
+        media.status = MediaStatus.DOWNLOADING
+        return
+    has_missing_resource = db.scalar(
+        select(LocalResource.id).where(LocalResource.media_id == media_id).limit(1)
     )
+    media.status = MediaStatus.MISSING if has_missing_resource is not None else MediaStatus.PENDING
 
 
 def _run_download(

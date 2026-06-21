@@ -228,6 +228,13 @@ class LocalResource(Base):
     mime_type: Mapped[str] = mapped_column(String(128), default="video/mp4")
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     modified_at_ns: Mapped[int | None] = mapped_column(Integer)
+    is_available: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default="1",
+        index=True,
+    )
+    missing_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     media: Mapped[Media | None] = relationship(back_populates="resources")

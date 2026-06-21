@@ -40,6 +40,8 @@ class ScanTask(Base):
     added_files: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     updated_files: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     skipped_files: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    missing_files: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    restored_files: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime)

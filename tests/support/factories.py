@@ -49,6 +49,7 @@ class ModelFactory:
             "file_name": unique_name,
             "file_size": 1024,
             "mime_type": "video/mp4",
+            "is_available": True,
         }
         values.update(overrides)
         return self._save(LocalResource(**values))

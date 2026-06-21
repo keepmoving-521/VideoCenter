@@ -198,6 +198,9 @@ python -m pytest
 后台媒体扫描、任务进度和增量检测规则请参阅
 [后台增量扫描文档](docs/background-incremental-media-scan.md)。
 
+新增文件登记、缺失标记和文件恢复规则请参阅
+[扫描差异检测文档](docs/scan-new-deleted-video-detection.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅
