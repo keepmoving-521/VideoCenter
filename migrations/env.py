@@ -8,6 +8,7 @@ from videocenter.models import (  # noqa: F401
     AnalysisTask,
     DownloadTask,
     Episode,
+    HlsTask,
     LocalResource,
     Media,
     Season,

@@ -12,6 +12,7 @@ EXPECTED_TABLES = {
     "analysis_tasks",
     "download_tasks",
     "episodes",
+    "hls_tasks",
     "local_resources",
     "media",
     "media_directories",

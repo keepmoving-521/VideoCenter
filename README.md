@@ -246,6 +246,9 @@ FFmpeg、FFprobe 的自动检测和自定义路径配置请参阅
 播放音轨、视频清晰度和浏览器格式兼容性预判请参阅
 [播放媒体能力文档](docs/playback-audio-quality-browser-support.md)。
 
+HLS 后台转码、播放列表和分片访问请参阅
+[HLS 转码播放文档](docs/hls-transcoding-playback.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

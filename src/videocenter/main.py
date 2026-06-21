@@ -12,6 +12,7 @@ from videocenter.core.logging import configure_logging
 from videocenter.schemas.error import STANDARD_ERROR_RESPONSES
 from videocenter.services.analysis_tasks import restore_analysis_tasks
 from videocenter.services.downloads import restore_download_queue
+from videocenter.services.hls import restore_hls_tasks
 from videocenter.services.local_library import restore_scan_tasks
 
 settings = get_settings()
@@ -44,6 +45,14 @@ async def lifespan(_: FastAPI):
         extra={
             "analysis_event": "recovery_completed",
             "restored_analysis_count": restored_analyses,
+        },
+    )
+    restored_hls = restore_hls_tasks()
+    logger.info(
+        "HLS task recovery completed",
+        extra={
+            "hls_event": "recovery_completed",
+            "restored_hls_count": restored_hls,
         },
     )
     logger.info("Application started")

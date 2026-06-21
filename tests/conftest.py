@@ -29,6 +29,7 @@ from videocenter.models import (  # noqa: E402, F401
     AnalysisTask,
     DownloadTask,
     Episode,
+    HlsTask,
     LocalResource,
     Media,
     MediaDirectory,

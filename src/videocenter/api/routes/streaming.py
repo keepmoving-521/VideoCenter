@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import AppException, NotFoundError
+from videocenter.models.hls import HlsTask
 from videocenter.models.media import LocalResource
+from videocenter.schemas.hls import HlsTaskRead
 from videocenter.schemas.streaming import (
     PlaybackAudioTrackList,
     PlaybackBrowserCompatibility,
@@ -21,6 +23,12 @@ from videocenter.schemas.streaming import (
     PlaybackVideoQuality,
 )
 from videocenter.services.downloads import update_media_download_status
+from videocenter.services.hls import (
+    create_or_reuse_hls_task,
+    hls_playlist_path,
+    hls_segment_path,
+    start_hls_task,
+)
 from videocenter.services.playback_capabilities import (
     aspect_ratio,
     evaluate_browser_compatibility,
@@ -40,6 +48,67 @@ from videocenter.services.subtitles import (
 
 router = APIRouter()
 CACHE_CONTROL = "private, max-age=3600, no-transform"
+
+
+@router.post(
+    "/{resource_id}/hls",
+    response_model=HlsTaskRead,
+    status_code=202,
+)
+def create_hls_transcoding_task(
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    db: Session = Depends(get_db),
+):
+    resource = _get_resource_or_404(db, resource_id)
+    if not Path(resource.file_path).is_file():
+        _mark_resource_missing(db, resource)
+        raise NotFoundError("视频文件已丢失", code="VIDEO_FILE_MISSING")
+    task = create_or_reuse_hls_task(db, resource)
+    if task.status.value == "waiting":
+        start_hls_task(task.id)
+    return HlsTaskRead.from_task(task)
+
+
+@router.get("/hls-tasks/{task_id}", response_model=HlsTaskRead)
+def get_hls_task(
+    task_id: Annotated[int, ApiPath(gt=0)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(HlsTask, task_id)
+    if task is None:
+        raise NotFoundError("HLS 转码任务不存在", code="HLS_TASK_NOT_FOUND")
+    return HlsTaskRead.from_task(task)
+
+
+@router.get("/hls/{task_id}/index.m3u8")
+def get_hls_playlist(
+    task_id: Annotated[int, ApiPath(gt=0)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(HlsTask, task_id)
+    if task is None:
+        raise NotFoundError("HLS 转码任务不存在", code="HLS_TASK_NOT_FOUND")
+    return FileResponse(
+        hls_playlist_path(task),
+        media_type="application/vnd.apple.mpegurl",
+        headers={"Cache-Control": "private, max-age=60, no-transform"},
+    )
+
+
+@router.get("/hls/{task_id}/segments/{segment_name}")
+def get_hls_segment(
+    task_id: Annotated[int, ApiPath(gt=0)],
+    segment_name: Annotated[str, ApiPath(min_length=1, max_length=128)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(HlsTask, task_id)
+    if task is None:
+        raise NotFoundError("HLS 转码任务不存在", code="HLS_TASK_NOT_FOUND")
+    return FileResponse(
+        hls_segment_path(task, segment_name),
+        media_type="video/mp2t",
+        headers={"Cache-Control": "private, max-age=86400, immutable, no-transform"},
+    )
 
 
 @router.get("/{resource_id}")
@@ -151,6 +220,7 @@ def get_playback_resource_detail(
         audio_tracks_url=f"/api/v1/stream/{resource.id}/audio-tracks",
         quality_url=f"/api/v1/stream/{resource.id}/quality",
         compatibility_url=f"/api/v1/stream/{resource.id}/compatibility",
+        hls_task_create_url=f"/api/v1/stream/{resource.id}/hls",
         supports_range=True,
         cache_control=CACHE_CONTROL,
     )
