@@ -90,6 +90,17 @@ def test_download_worker_count_is_configurable():
     assert settings.download_worker_count == 3
 
 
+def test_ffmpeg_and_ffprobe_paths_are_configurable():
+    settings = Settings(
+        ffmpeg_path='  "C:/media tools/ffmpeg.exe"  ',
+        ffprobe_path=" C:/media tools/ffprobe.exe ",
+        _env_file=None,
+    )
+
+    assert settings.ffmpeg_path == "C:/media tools/ffmpeg.exe"
+    assert settings.ffprobe_path == "C:/media tools/ffprobe.exe"
+
+
 @pytest.mark.parametrize("worker_count", [0, 17])
 def test_invalid_download_worker_count_is_rejected(worker_count):
     with pytest.raises(ValidationError):

@@ -216,6 +216,9 @@ python -m pytest
 媒体目录的磁盘空间统计、使用率和容量预警配置请参阅
 [媒体目录容量预警文档](docs/media-directory-storage-warning.md)。
 
+FFmpeg、FFprobe 的自动检测和自定义路径配置请参阅
+[FFmpeg 检测与配置文档](docs/ffmpeg-detection-configuration.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

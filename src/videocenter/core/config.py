@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     database_echo: bool = False
     database_url: str = "sqlite:///./data/videocenter.db"
     media_root: Path = Path("./data/media")
+    ffmpeg_path: str | None = None
+    ffprobe_path: str | None = None
     download_worker_count: int = 1
     parser_timeout_seconds: float = 30
     parser_max_attempts: int = 3
@@ -60,6 +62,18 @@ class Settings(BaseSettings):
         if not value.startswith("/"):
             raise ValueError("API prefix must start with '/'")
         return value.rstrip("/") or "/"
+
+    @field_validator("ffmpeg_path", "ffprobe_path")
+    @classmethod
+    def normalize_media_tool_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().strip('"')
+        if not normalized:
+            return None
+        if "\x00" in normalized:
+            raise ValueError("Media tool path cannot contain null characters")
+        return normalized
 
     @field_validator("log_level")
     @classmethod
