@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from videocenter.models.media import MediaType
 from videocenter.schemas.common import ApiRequestModel, PositiveId
@@ -93,3 +93,22 @@ class NextEpisodeRead(BaseModel):
     resource_id: int | None
     playable: bool
     stream_url: str | None
+
+
+class HistoryBatchDeleteRequest(ApiRequestModel):
+    media_ids: list[PositiveId] = Field(min_length=1, max_length=100)
+
+    @field_validator("media_ids")
+    @classmethod
+    def deduplicate_media_ids(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(value))
+
+
+class HistoryBatchDeleteResponse(BaseModel):
+    deleted_count: int
+    deleted_media_ids: list[int]
+    missing_media_ids: list[int]
+
+
+class HistoryClearResponse(BaseModel):
+    deleted_count: int

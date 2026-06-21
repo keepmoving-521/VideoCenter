@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
@@ -10,6 +10,9 @@ from videocenter.core.exceptions import BadRequestError, NotFoundError
 from videocenter.models.history import WatchHistory
 from videocenter.models.media import Episode, LocalResource, Media, Season
 from videocenter.schemas.history import (
+    HistoryBatchDeleteRequest,
+    HistoryBatchDeleteResponse,
+    HistoryClearResponse,
     HistoryListItem,
     HistoryMediaSummary,
     HistoryPage,
@@ -140,6 +143,38 @@ def list_recently_watched(
         page_size=page_size,
         continue_watching_only=False,
     )
+
+
+@router.post("/batch-delete", response_model=HistoryBatchDeleteResponse)
+def batch_delete_history(
+    payload: HistoryBatchDeleteRequest,
+    db: Session = Depends(get_db),
+):
+    existing_media_ids = list(
+        db.scalars(
+            select(WatchHistory.media_id).where(WatchHistory.media_id.in_(payload.media_ids))
+        ).all()
+    )
+    existing_set = set(existing_media_ids)
+    deleted_media_ids = [media_id for media_id in payload.media_ids if media_id in existing_set]
+    missing_media_ids = [media_id for media_id in payload.media_ids if media_id not in existing_set]
+    if deleted_media_ids:
+        db.execute(delete(WatchHistory).where(WatchHistory.media_id.in_(deleted_media_ids)))
+        db.commit()
+    return HistoryBatchDeleteResponse(
+        deleted_count=len(deleted_media_ids),
+        deleted_media_ids=deleted_media_ids,
+        missing_media_ids=missing_media_ids,
+    )
+
+
+@router.delete("/clear", response_model=HistoryClearResponse)
+def clear_history(db: Session = Depends(get_db)):
+    deleted_count = db.scalar(select(func.count(WatchHistory.id))) or 0
+    if deleted_count:
+        db.execute(delete(WatchHistory))
+        db.commit()
+    return HistoryClearResponse(deleted_count=deleted_count)
 
 
 @router.put("/{media_id}/completed", response_model=HistoryRead)
