@@ -1,5 +1,7 @@
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 
 _RANGE_PATTERN = re.compile(r"^\s*bytes\s*=\s*(.*?)\s*$", re.IGNORECASE)
 
@@ -62,3 +64,25 @@ def iter_file_range(path: str, byte_range: ByteRange, chunk_size: int = 1024 * 1
                 break
             remaining -= len(chunk)
             yield chunk
+
+
+def is_not_modified(
+    *,
+    etag: str,
+    modified_at: float,
+    if_none_match: str | None,
+    if_modified_since: str | None,
+) -> bool:
+    if if_none_match:
+        candidates = {value.strip() for value in if_none_match.split(",")}
+        return "*" in candidates or etag in candidates or f"W/{etag}" in candidates
+    if not if_modified_since:
+        return False
+    try:
+        requested_time = parsedate_to_datetime(if_modified_since)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if requested_time.tzinfo is None:
+        requested_time = requested_time.replace(tzinfo=UTC)
+    file_time = datetime.fromtimestamp(modified_at, tz=UTC).replace(microsecond=0)
+    return file_time <= requested_time.astimezone(UTC).replace(microsecond=0)

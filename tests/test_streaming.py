@@ -1,6 +1,6 @@
 import pytest
 
-from videocenter.services.streaming import ByteRange, parse_range_header
+from videocenter.services.streaming import ByteRange, is_not_modified, parse_range_header
 
 
 @pytest.mark.parametrize(
@@ -44,3 +44,30 @@ def test_empty_file_rejects_range_but_allows_no_range():
     assert parse_range_header(None, 0) is None
     with pytest.raises(ValueError):
         parse_range_header("bytes=0-", 0)
+
+
+def test_cache_validation_prefers_etag_and_supports_modified_since():
+    assert is_not_modified(
+        etag='"abc"',
+        modified_at=1_700_000_000,
+        if_none_match='"abc"',
+        if_modified_since=None,
+    )
+    assert is_not_modified(
+        etag='"abc"',
+        modified_at=1_700_000_000,
+        if_none_match='W/"abc"',
+        if_modified_since=None,
+    )
+    assert is_not_modified(
+        etag='"abc"',
+        modified_at=1_700_000_000,
+        if_none_match=None,
+        if_modified_since="Tue, 14 Nov 2023 22:13:20 GMT",
+    )
+    assert not is_not_modified(
+        etag='"abc"',
+        modified_at=1_700_000_000,
+        if_none_match='"different"',
+        if_modified_since="Wed, 15 Nov 2023 22:13:20 GMT",
+    )
