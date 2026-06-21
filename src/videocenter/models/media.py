@@ -228,6 +228,7 @@ class LocalResource(Base):
     mime_type: Mapped[str] = mapped_column(String(128), default="video/mp4")
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     modified_at_ns: Mapped[int | None] = mapped_column(Integer)
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64), index=True)
     detected_media_type: Mapped[str | None] = mapped_column(String(30))
     parsed_title: Mapped[str | None] = mapped_column(String(255))
     parsed_release_year: Mapped[int | None] = mapped_column(Integer)

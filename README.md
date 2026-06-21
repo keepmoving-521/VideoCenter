@@ -207,6 +207,9 @@ python -m pytest
 本地文件的单个关联、重新关联、解除关联和批量关联请参阅
 [本地文件关联文档](docs/local-resource-associations.md)。
 
+本地文件 SHA-256 计算和重复文件检测请参阅
+[文件哈希与重复检测文档](docs/local-file-hash-duplicates.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

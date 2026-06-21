@@ -278,6 +278,7 @@ class LocalResourceRead(BaseModel):
     mime_type: str
     duration_seconds: float | None
     modified_at_ns: int | None
+    checksum_sha256: str | None
     detected_media_type: MediaType | None
     parsed_title: str | None
     parsed_release_year: int | None
@@ -306,6 +307,20 @@ class LocalResourceBatchAssociationResponse(BaseModel):
     associated_count: int
     associated_resource_ids: list[int]
     missing_resource_ids: list[int]
+
+
+class DuplicateLocalResourceGroup(BaseModel):
+    checksum_sha256: str
+    file_size: int
+    duplicate_count: int
+    resources: list[LocalResourceRead]
+
+
+class DuplicateLocalResourcesResponse(BaseModel):
+    group_count: int
+    duplicate_file_count: int
+    reclaimable_bytes: int
+    groups: list[DuplicateLocalResourceGroup]
 
 
 class MediaRead(BaseModel):

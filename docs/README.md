@@ -54,5 +54,6 @@
 - [F07～F08：新增与删除视频文件检测](scan-new-deleted-video-detection.md)
 - [F09～F11：视频文件类型、文件名与季集识别](video-filename-recognition.md)
 - [F12～F13：本地文件手动与批量关联](local-resource-associations.md)
+- [F14～F15：文件哈希与重复文件检测](local-file-hash-duplicates.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

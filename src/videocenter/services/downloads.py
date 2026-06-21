@@ -25,6 +25,7 @@ from videocenter.services.downloaders import (
     YtDlpDownloader,
 )
 from videocenter.services.downloaders.base import normalize_download_url
+from videocenter.services.local_file_hashes import calculate_sha256
 from videocenter.services.notifications import create_download_completed_notification
 from videocenter.services.video_filename import parse_video_filename
 
@@ -326,6 +327,9 @@ def register_local_resource(
     resource.file_name = result.target_path.name
     resource.file_size = result.file_size
     resource.mime_type = result.mime_type or "application/octet-stream"
+    resource.checksum_sha256 = result.checksum
+    if resource.checksum_sha256 is None and result.target_path.exists():
+        resource.checksum_sha256 = calculate_sha256(result.target_path)
     resource.is_available = True
     resource.missing_at = None
     parsed = parse_video_filename(result.target_path.name)

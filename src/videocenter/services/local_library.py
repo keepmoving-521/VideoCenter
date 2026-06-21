@@ -12,6 +12,7 @@ from videocenter.core.database import SessionLocal
 from videocenter.models.media import LocalResource
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 from videocenter.services.downloads import update_media_download_status
+from videocenter.services.local_file_hashes import calculate_sha256
 from videocenter.services.video_filename import ParsedVideoFilename, parse_video_filename
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".ts"}
@@ -147,12 +148,14 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
         and (task.media_id is None or resource.media_id == task.media_id)
         and resource.is_available
         and resource.parsed_title is not None
+        and resource.checksum_sha256 is not None
     ):
         task.skipped_files += 1
         return resource.media_id
 
     mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     parsed = parse_video_filename(path.name)
+    checksum_sha256 = calculate_sha256(path)
     if resource is None:
         resource = LocalResource(
             media_id=task.media_id,
@@ -161,6 +164,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
             file_size=stat.st_size,
             mime_type=mime_type,
             modified_at_ns=stat.st_mtime_ns,
+            checksum_sha256=checksum_sha256,
         )
         _apply_parsed_filename(resource, parsed)
         db.add(resource)
@@ -172,6 +176,7 @@ def _process_file(db: Session, task: ScanTask, path: Path) -> int | None:
     resource.file_size = stat.st_size
     resource.mime_type = mime_type
     resource.modified_at_ns = stat.st_mtime_ns
+    resource.checksum_sha256 = checksum_sha256
     resource.is_available = True
     resource.missing_at = None
     _apply_parsed_filename(resource, parsed)

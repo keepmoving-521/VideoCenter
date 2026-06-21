@@ -9,6 +9,8 @@ from videocenter.core.exceptions import BadRequestError, NotFoundError
 from videocenter.models.media import LocalResource, Media
 from videocenter.models.scan import ScanTask
 from videocenter.schemas.media import (
+    DuplicateLocalResourceGroup,
+    DuplicateLocalResourcesResponse,
     LocalResourceAssociationRequest,
     LocalResourceBatchAssociationRequest,
     LocalResourceBatchAssociationResponse,
@@ -16,6 +18,7 @@ from videocenter.schemas.media import (
     LocalScanRequest,
 )
 from videocenter.schemas.scan import ScanTaskRead
+from videocenter.services.local_file_hashes import find_duplicate_local_resources
 from videocenter.services.local_library import (
     create_scan_task,
     resolve_library_path,
@@ -29,6 +32,31 @@ router = APIRouter()
 @router.get("", response_model=list[LocalResourceRead])
 def list_resources(db: Session = Depends(get_db)):
     return db.scalars(select(LocalResource).order_by(LocalResource.id.desc())).all()
+
+
+@router.get(
+    "/duplicates",
+    response_model=DuplicateLocalResourcesResponse,
+)
+def list_duplicate_resources(db: Session = Depends(get_db)):
+    groups = find_duplicate_local_resources(db)
+    response_groups = [
+        DuplicateLocalResourceGroup(
+            checksum_sha256=group[0].checksum_sha256,
+            file_size=group[0].file_size,
+            duplicate_count=len(group),
+            resources=group,
+        )
+        for group in groups
+    ]
+    return DuplicateLocalResourcesResponse(
+        group_count=len(response_groups),
+        duplicate_file_count=sum(group.duplicate_count for group in response_groups),
+        reclaimable_bytes=sum(
+            group.file_size * (group.duplicate_count - 1) for group in response_groups
+        ),
+        groups=response_groups,
+    )
 
 
 @router.post(
