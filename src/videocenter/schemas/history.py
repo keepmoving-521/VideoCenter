@@ -23,3 +23,14 @@ class HistoryRead(HistoryUpsert):
 
     id: int
     watched_at: datetime
+
+
+class PlaybackProgressUpdate(ApiRequestModel):
+    position_seconds: float = Field(ge=0)
+    duration_seconds: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_playback_position(self) -> "PlaybackProgressUpdate":
+        if self.duration_seconds is not None and self.position_seconds > self.duration_seconds:
+            raise ValueError("播放位置不能超过视频总时长")
+        return self

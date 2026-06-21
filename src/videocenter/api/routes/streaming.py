@@ -10,9 +10,10 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
-from videocenter.core.exceptions import AppException, NotFoundError
+from videocenter.core.exceptions import AppException, ConflictError, NotFoundError
 from videocenter.models.hls import HlsTask
 from videocenter.models.media import LocalResource
+from videocenter.schemas.history import HistoryRead, PlaybackProgressUpdate
 from videocenter.schemas.hls import (
     HlsCacheCleanupRequest,
     HlsCacheCleanupResult,
@@ -50,6 +51,7 @@ from videocenter.services.subtitles import (
     get_external_subtitle,
     subtitle_as_webvtt,
 )
+from videocenter.services.watch_history import save_watch_history
 
 router = APIRouter()
 CACHE_CONTROL = "private, max-age=3600, no-transform"
@@ -243,8 +245,41 @@ def get_playback_resource_detail(
         quality_url=f"/api/v1/stream/{resource.id}/quality",
         compatibility_url=f"/api/v1/stream/{resource.id}/compatibility",
         hls_task_create_url=f"/api/v1/stream/{resource.id}/hls",
+        progress_url=f"/api/v1/stream/{resource.id}/progress",
         supports_range=True,
         cache_control=CACHE_CONTROL,
+    )
+
+
+@router.put("/{resource_id}/progress", response_model=HistoryRead)
+def save_playback_progress(
+    resource_id: Annotated[int, ApiPath(gt=0)],
+    payload: PlaybackProgressUpdate,
+    db: Session = Depends(get_db),
+):
+    resource = _get_resource_or_404(db, resource_id)
+    if resource.media_id is None:
+        raise ConflictError(
+            "本地资源尚未关联影视条目，无法保存播放进度",
+            code="RESOURCE_NOT_ASSOCIATED",
+        )
+    duration_seconds = (
+        payload.duration_seconds
+        if payload.duration_seconds is not None
+        else resource.duration_seconds
+    )
+    if duration_seconds is not None and payload.position_seconds > duration_seconds:
+        raise AppException(
+            "播放位置不能超过视频总时长",
+            code="PLAYBACK_POSITION_EXCEEDS_DURATION",
+            status_code=422,
+        )
+    return save_watch_history(
+        db,
+        media_id=resource.media_id,
+        resource_id=resource.id,
+        position_seconds=payload.position_seconds,
+        duration_seconds=duration_seconds,
     )
 
 

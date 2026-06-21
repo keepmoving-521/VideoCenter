@@ -111,3 +111,4 @@ def test_playback_detail_contains_media_info_urls(
     assert payload["audio_tracks_url"].endswith(f"/stream/{resource.id}/audio-tracks")
     assert payload["quality_url"].endswith(f"/stream/{resource.id}/quality")
     assert payload["compatibility_url"].endswith(f"/stream/{resource.id}/compatibility")
+    assert payload["progress_url"].endswith(f"/stream/{resource.id}/progress")

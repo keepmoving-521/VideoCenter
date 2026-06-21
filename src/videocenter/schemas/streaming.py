@@ -17,6 +17,7 @@ class PlaybackResourceDetail(BaseModel):
     quality_url: str
     compatibility_url: str
     hls_task_create_url: str
+    progress_url: str
     supports_range: bool
     cache_control: str
 

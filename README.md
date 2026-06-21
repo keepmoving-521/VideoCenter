@@ -252,6 +252,9 @@ HLS 后台转码、播放列表和分片访问请参阅
 HLS 实时进度、并发限制和缓存清理请参阅
 [HLS 任务增强文档](docs/hls-progress-concurrency-cache.md)。
 
+视频播放进度保存请参阅
+[播放进度保存文档](docs/playback-progress-saving.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

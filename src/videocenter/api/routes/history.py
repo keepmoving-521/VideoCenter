@@ -9,6 +9,7 @@ from videocenter.core.exceptions import BadRequestError, NotFoundError
 from videocenter.models.history import WatchHistory
 from videocenter.models.media import LocalResource, Media
 from videocenter.schemas.history import HistoryRead, HistoryUpsert
+from videocenter.services.watch_history import save_watch_history
 
 router = APIRouter()
 
@@ -31,16 +32,7 @@ def save_history(payload: HistoryUpsert, db: Session = Depends(get_db)):
                 "本地资源不属于指定影视条目",
                 code="RESOURCE_MEDIA_MISMATCH",
             )
-    history = db.scalar(select(WatchHistory).where(WatchHistory.media_id == payload.media_id))
-    if history is None:
-        history = WatchHistory(**payload.model_dump())
-        db.add(history)
-    else:
-        for field, value in payload.model_dump().items():
-            setattr(history, field, value)
-    db.commit()
-    db.refresh(history)
-    return history
+    return save_watch_history(db, **payload.model_dump())
 
 
 @router.delete("/{media_id}", status_code=204)
