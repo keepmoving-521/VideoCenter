@@ -41,3 +41,13 @@ class BackgroundTaskStatusDefinition(BaseModel):
     active: bool
     successful: bool
     allowed_targets: list[BackgroundTaskStatus]
+
+
+class BackgroundTaskPage(BaseModel):
+    items: list[BackgroundTaskRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool

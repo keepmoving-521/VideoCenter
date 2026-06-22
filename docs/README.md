@@ -80,5 +80,6 @@
 - [Q02：统一后台任务状态定义](unified-background-task-statuses.md)
 - [Q03～Q04：资源解析与视频下载接入统一任务](parser-download-background-task-integration.md)
 - [Q05～Q07：扫描、分析与转码接入统一任务](scan-analysis-transcode-background-task-integration.md)
+- [Q08～Q09：统一任务进度查询与取消](background-task-progress-cancellation.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

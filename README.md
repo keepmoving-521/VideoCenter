@@ -285,6 +285,9 @@ HLS 实时进度、并发限制和缓存清理请参阅
 本地扫描、媒体分析与 HLS 转码接入统一任务请参阅
 [扫描分析转码任务接入文档](docs/scan-analysis-transcode-background-task-integration.md)。
 
+统一任务进度查询与取消请参阅
+[统一任务查询取消文档](docs/background-task-progress-cancellation.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅
