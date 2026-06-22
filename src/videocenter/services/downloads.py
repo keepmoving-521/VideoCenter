@@ -14,6 +14,7 @@ from videocenter.core.database import SessionLocal
 from videocenter.core.exceptions import ConflictError
 from videocenter.models.download import DownloadStatus, DownloadTask
 from videocenter.models.media import LocalResource, Media, MediaStatus
+from videocenter.services.background_tasks import sync_download_background_task
 from videocenter.services.download_queue import DownloadTaskQueue
 from videocenter.services.downloaders import (
     DownloadCancellationToken,
@@ -122,6 +123,7 @@ def restore_download_queue() -> int:
             .order_by(DownloadTask.id)
         ).all()
         for task in [*waiting_tasks, *paused_tasks]:
+            sync_download_background_task(db, task)
             update_media_download_status(db, task.media_id)
             target_directory, _ = resolve_download_directory(task.target_directory)
             cleanup_download_temp_file(target_directory / safe_target_name(task.target_name))
@@ -153,6 +155,7 @@ def cancel_download(db: Session, task: DownloadTask) -> DownloadTask:
         task.status = DownloadStatus.CANCELLED
         task.speed_bytes_per_second = None
         task.remaining_seconds = None
+        sync_download_background_task(db, task)
         db.flush()
         update_media_download_status(db, task.media_id)
         db.commit()
@@ -181,6 +184,7 @@ def pause_download(db: Session, task: DownloadTask) -> DownloadTask:
     task.status = DownloadStatus.PAUSED
     task.speed_bytes_per_second = None
     task.remaining_seconds = None
+    sync_download_background_task(db, task)
     update_media_download_status(db, task.media_id)
     db.commit()
     db.refresh(task)
@@ -210,6 +214,7 @@ def resume_download(db: Session, task: DownloadTask) -> DownloadTask:
         task.status = DownloadStatus.WAITING
         queue_instance.enqueue(task.id, priority=task.priority)
     task.error_message = None
+    sync_download_background_task(db, task)
     update_media_download_status(db, task.media_id)
     db.commit()
     db.refresh(task)
@@ -230,6 +235,7 @@ def retry_download(db: Session, task: DownloadTask) -> DownloadTask:
     reset_download_metrics(task)
     task.status = DownloadStatus.WAITING
     task.error_message = None
+    sync_download_background_task(db, task)
     update_media_download_status(db, task.media_id)
     db.commit()
     get_download_queue().enqueue(task.id, priority=task.priority)
@@ -429,6 +435,7 @@ def _run_download(
             )
             task.downloader_name = selected_name
             selected_downloader = downloader or get_downloader(selected_name)
+            sync_download_background_task(db, task)
             update_media_download_status(db, task.media_id)
             db.commit()
             logger.info(
@@ -471,6 +478,7 @@ def _run_download(
                         2,
                     )
                 task.remaining_seconds = progress.remaining_seconds
+                sync_download_background_task(db, task)
                 db.commit()
                 if progress.percentage is not None:
                     bucket = int(progress.percentage // 10)
@@ -504,6 +512,7 @@ def _run_download(
             task.remaining_seconds = 0
             task.checksum_sha256 = result.checksum
             task.status = DownloadStatus.COMPLETED
+            sync_download_background_task(db, task)
             register_local_resource(db, task=task, result=result)
             create_download_completed_notification(db, task=task)
             db.flush()
@@ -527,6 +536,7 @@ def _run_download(
                     task.status = DownloadStatus.CANCELLED
                 task.speed_bytes_per_second = None
                 task.remaining_seconds = None
+                sync_download_background_task(db, task)
                 db.flush()
                 update_media_download_status(db, task.media_id)
                 db.commit()
@@ -545,6 +555,7 @@ def _run_download(
                 task.speed_bytes_per_second = None
                 task.remaining_seconds = None
                 task.error_message = str(exc)
+                sync_download_background_task(db, task)
                 db.flush()
                 update_media_download_status(db, task.media_id)
                 db.commit()

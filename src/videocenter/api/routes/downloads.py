@@ -9,6 +9,7 @@ from videocenter.core.exceptions import BadRequestError, ConflictError, NotFound
 from videocenter.models.download import DownloadStatus, DownloadTask
 from videocenter.models.media import Media
 from videocenter.schemas.download import DownloadCreate, DownloadRead
+from videocenter.services.background_tasks import sync_download_background_task
 from videocenter.services.downloads import (
     cancel_download,
     generate_target_name,
@@ -98,6 +99,7 @@ def create_download(payload: DownloadCreate, db: Session = Depends(get_db)):
     )
     db.add(task)
     db.flush()
+    sync_download_background_task(db, task)
     update_media_download_status(db, task.media_id)
     db.commit()
     db.refresh(task)

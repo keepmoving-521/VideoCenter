@@ -12,6 +12,11 @@ from videocenter.schemas.parsing import (
     ParseSaveRequest,
     ParseSaveResponse,
 )
+from videocenter.services.background_tasks import (
+    complete_resource_parse_background_task,
+    create_resource_parse_background_task,
+    fail_resource_parse_background_task,
+)
 from videocenter.services.parse_persistence import save_parse_result
 from videocenter.services.parse_workflow import (
     ParseWorkflowStore,
@@ -41,18 +46,48 @@ def get_parse_workflow_store() -> ParseWorkflowStore:
 )
 async def preview_resource_page(
     payload: ParsePreviewRequest,
+    db: Session = Depends(get_db),
     registry: ParserRegistry = Depends(get_parser_registry),
     store: ParseWorkflowStore = Depends(get_parse_workflow_store),
 ):
     parse_task_id = uuid4().hex
-    result = await registry.parse_url(
-        str(payload.source_url),
+    source_url = str(payload.source_url)
+    background_task = create_resource_parse_background_task(
+        db,
+        parse_task_id=parse_task_id,
+        source_url=source_url,
         preferred_language=payload.preferred_language,
-        task_id=parse_task_id,
+    )
+    try:
+        result = await registry.parse_url(
+            source_url,
+            preferred_language=payload.preferred_language,
+            task_id=parse_task_id,
+        )
+    except Exception as exc:
+        fail_resource_parse_background_task(db, background_task, exc)
+        raise
+    complete_resource_parse_background_task(
+        db,
+        background_task,
+        title=result.title,
+        source_site=result.source_site,
+        downloads_detected=len(result.downloads)
+        + sum(len(episode.downloads) for season in result.seasons for episode in season.episodes),
+        subtitles_detected=sum(
+            download.resource_type.value == "subtitle" for download in result.downloads
+        )
+        + sum(
+            download.resource_type.value == "subtitle"
+            for season in result.seasons
+            for episode in season.episodes
+            for download in episode.downloads
+        ),
     )
     preview_id, expires_at = store.create_preview(result)
     return ParsePreviewResponse(
         parse_task_id=parse_task_id,
+        background_task_id=background_task.id,
         preview_id=preview_id,
         expires_at=expires_at,
         result=result,

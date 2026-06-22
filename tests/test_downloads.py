@@ -6,6 +6,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from videocenter.models.background_task import (
+    BackgroundTask,
+    BackgroundTaskStatus,
+    BackgroundTaskType,
+)
 from videocenter.models.download import DownloadStatus
 from videocenter.models.media import LocalResource, MediaStatus
 from videocenter.models.notification import Notification, NotificationType
@@ -152,6 +157,7 @@ def test_download_task_execution_uses_downloader_result(
 
 def test_created_download_task_starts_in_waiting_status(
     api_client: TestClient,
+    db_session: Session,
     monkeypatch,
 ):
     queued_ids: list[int] = []
@@ -183,6 +189,15 @@ def test_created_download_task_starts_in_waiting_status(
     assert response.json()["remaining_seconds"] is None
     assert queued_ids == [response.json()["id"]]
     assert queued_priorities == [0]
+    background_task = db_session.scalar(
+        select(BackgroundTask).where(
+            BackgroundTask.task_type == BackgroundTaskType.DOWNLOAD,
+            BackgroundTask.source_task_id == response.json()["id"],
+        )
+    )
+    assert background_task is not None
+    assert background_task.status == BackgroundTaskStatus.WAITING
+    assert background_task.task_payload["target_name"] == "video.mp4"
 
 
 def test_created_linked_download_updates_media_status(

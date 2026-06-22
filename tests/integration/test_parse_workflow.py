@@ -1,9 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from tests.support.api import ApiAssertions
 from videocenter.api.routes.parsing import get_parser_registry
 from videocenter.main import app
+from videocenter.models.background_task import (
+    BackgroundTask,
+    BackgroundTaskStatus,
+    BackgroundTaskType,
+)
 from videocenter.services.parsers import (
     ParsedDownload,
     ParsedEpisode,
@@ -79,6 +85,7 @@ def parser_override():
 def test_preview_confirm_and_save_parse_result(
     api_client: TestClient,
     api_assertions: ApiAssertions,
+    db_session: Session,
     parser_override,
 ):
     preview = api_assertions.assert_status(
@@ -93,7 +100,15 @@ def test_preview_confirm_and_save_parse_result(
     )
     assert preview["result"]["title"] == "Parsed Series"
     assert len(preview["parse_task_id"]) == 32
+    assert preview["background_task_id"] > 0
     assert len(preview["preview_id"]) == 32
+    background_task = db_session.get(BackgroundTask, preview["background_task_id"])
+    assert background_task is not None
+    assert background_task.task_type == BackgroundTaskType.RESOURCE_PARSE
+    assert background_task.status == BackgroundTaskStatus.COMPLETED
+    assert background_task.progress == 100
+    assert background_task.task_payload["parse_task_id"] == preview["parse_task_id"]
+    assert background_task.task_result["title"] == "Parsed Series"
 
     edited = preview["result"]
     edited["title"] = "Confirmed Series"
@@ -212,6 +227,7 @@ def test_save_rejects_duplicate_source_page(
 def test_preview_returns_standard_timeout_error(
     api_client: TestClient,
     api_assertions: ApiAssertions,
+    db_session: Session,
 ):
     class SlowParser(WorkflowParser):
         name = "slow-workflow"
@@ -241,3 +257,8 @@ def test_preview_returns_standard_timeout_error(
         app.dependency_overrides.pop(get_parser_registry, None)
 
     assert error["error"]["details"]["attempts"] == 2
+    background_task = db_session.query(BackgroundTask).one()
+    assert background_task.task_type == BackgroundTaskType.RESOURCE_PARSE
+    assert background_task.status == BackgroundTaskStatus.FAILED
+    assert background_task.error_code == "PARSE_TIMEOUT"
+    assert background_task.error_message

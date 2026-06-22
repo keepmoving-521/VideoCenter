@@ -21,6 +21,7 @@ from videocenter.core.database import Base
 
 
 class BackgroundTaskType(StrEnum):
+    RESOURCE_PARSE = "resource_parse"
     DOWNLOAD = "download"
     MEDIA_SCAN = "media_scan"
     MEDIA_ANALYSIS = "media_analysis"

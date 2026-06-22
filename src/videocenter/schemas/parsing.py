@@ -13,6 +13,7 @@ class ParsePreviewRequest(ApiRequestModel):
 
 class ParsePreviewResponse(BaseModel):
     parse_task_id: str
+    background_task_id: int
     preview_id: str
     expires_at: datetime
     result: ParseResult
