@@ -10,10 +10,7 @@ from videocenter.api.router import api_router
 from videocenter.core.config import get_settings
 from videocenter.core.logging import configure_logging
 from videocenter.schemas.error import STANDARD_ERROR_RESPONSES
-from videocenter.services.analysis_tasks import restore_analysis_tasks
-from videocenter.services.downloads import restore_download_queue
-from videocenter.services.hls import restore_hls_tasks
-from videocenter.services.local_library import restore_scan_tasks
+from videocenter.services.task_recovery import recover_background_tasks
 
 settings = get_settings()
 configure_logging(settings)
@@ -23,36 +20,18 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings.media_root.mkdir(parents=True, exist_ok=True)
-    restored_downloads = restore_download_queue()
+    recovery = recover_background_tasks()
     logger.info(
-        "Download queue recovery completed",
+        "Background task recovery completed",
         extra={
-            "download_event": "recovery_completed",
-            "restored_download_count": restored_downloads,
-        },
-    )
-    restored_scans = restore_scan_tasks()
-    logger.info(
-        "Scan task recovery completed",
-        extra={
-            "scan_event": "recovery_completed",
-            "restored_scan_count": restored_scans,
-        },
-    )
-    restored_analyses = restore_analysis_tasks()
-    logger.info(
-        "Analysis task recovery completed",
-        extra={
-            "analysis_event": "recovery_completed",
-            "restored_analysis_count": restored_analyses,
-        },
-    )
-    restored_hls = restore_hls_tasks()
-    logger.info(
-        "HLS task recovery completed",
-        extra={
-            "hls_event": "recovery_completed",
-            "restored_hls_count": restored_hls,
+            "task_event": "recovery_completed",
+            "restored_task_count": recovery.restored_total,
+            "restored_download_count": recovery.restored_downloads,
+            "restored_scan_count": recovery.restored_scans,
+            "restored_analysis_count": recovery.restored_analyses,
+            "restored_hls_count": recovery.restored_hls,
+            "reconciled_task_count": recovery.reconciled_tasks,
+            "interrupted_task_count": recovery.interrupted_tasks,
         },
     )
     logger.info("Application started")
