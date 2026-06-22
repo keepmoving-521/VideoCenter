@@ -81,5 +81,6 @@
 - [Q03～Q04：资源解析与视频下载接入统一任务](parser-download-background-task-integration.md)
 - [Q05～Q07：扫描、分析与转码接入统一任务](scan-analysis-transcode-background-task-integration.md)
 - [Q08～Q09：统一任务进度查询与取消](background-task-progress-cancellation.md)
+- [Q10～Q12：统一任务重试、日志与历史清理](background-task-retry-logs-cleanup.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

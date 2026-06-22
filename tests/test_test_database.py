@@ -11,6 +11,7 @@ EXPECTED_TABLES = {
     "alembic_version",
     "analysis_tasks",
     "background_tasks",
+    "background_task_logs",
     "download_tasks",
     "episodes",
     "hls_tasks",

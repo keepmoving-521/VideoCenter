@@ -152,3 +152,26 @@ class BackgroundTask(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+
+
+class BackgroundTaskLog(Base):
+    __tablename__ = "background_task_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("background_tasks.id", ondelete="CASCADE"),
+        index=True,
+    )
+    event: Mapped[str] = mapped_column(String(100), index=True)
+    message: Mapped[str] = mapped_column(String(1000))
+    status: Mapped[BackgroundTaskStatus | None] = mapped_column(
+        Enum(BackgroundTaskStatus),
+        index=True,
+    )
+    progress: Mapped[float | None] = mapped_column(Float)
+    details: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        index=True,
+    )

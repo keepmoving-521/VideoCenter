@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from videocenter.models.analysis import AnalysisTask
 from videocenter.models.background_task import (
     BackgroundTask,
+    BackgroundTaskLog,
     BackgroundTaskStatus,
     BackgroundTaskType,
 )
@@ -145,6 +146,28 @@ def transition_background_task(
     return task
 
 
+def record_background_task_log(
+    db: Session,
+    task: BackgroundTask,
+    *,
+    event: str,
+    message: str,
+    details: dict | None = None,
+) -> BackgroundTaskLog:
+    if task.id is None:
+        db.flush()
+    log = BackgroundTaskLog(
+        task_id=task.id,
+        event=event,
+        message=message,
+        status=task.status,
+        progress=task.progress,
+        details=details or {},
+    )
+    db.add(log)
+    return log
+
+
 def create_resource_parse_background_task(
     db: Session,
     *,
@@ -166,7 +189,19 @@ def create_resource_parse_background_task(
     )
     db.add(task)
     db.flush()
+    record_background_task_log(
+        db,
+        task,
+        event="created",
+        message="资源解析任务已创建",
+    )
     transition_background_task(task, BackgroundTaskStatus.RUNNING)
+    record_background_task_log(
+        db,
+        task,
+        event="started",
+        message="资源解析任务开始执行",
+    )
     db.commit()
     db.refresh(task)
     return task
@@ -188,6 +223,13 @@ def complete_resource_parse_background_task(
         "subtitles_detected": subtitles_detected,
     }
     transition_background_task(task, BackgroundTaskStatus.COMPLETED)
+    record_background_task_log(
+        db,
+        task,
+        event="completed",
+        message="资源解析任务执行完成",
+        details=task.task_result,
+    )
     db.commit()
     db.refresh(task)
     return task
@@ -203,6 +245,13 @@ def fail_resource_parse_background_task(
         BackgroundTaskStatus.FAILED,
         error_code=getattr(exc, "code", type(exc).__name__),
         error_message=str(exc),
+    )
+    record_background_task_log(
+        db,
+        task,
+        event="failed",
+        message="资源解析任务执行失败",
+        details={"error_code": task.error_code, "error_message": task.error_message},
     )
     db.commit()
     db.refresh(task)
@@ -237,7 +286,15 @@ def sync_download_background_task(
         )
         db.add(background)
         db.flush()
+        record_background_task_log(
+            db,
+            background,
+            event="created",
+            message="视频下载任务已接入统一任务中心",
+        )
 
+    previous_status = background.status
+    previous_progress = background.progress
     target_status = normalize_task_status(task.status)
     if (
         background.status == BackgroundTaskStatus.FAILED
@@ -274,6 +331,12 @@ def sync_download_background_task(
         background.error_code = "DOWNLOAD_FAILED"
     else:
         background.error_code = None
+    _record_sync_change(
+        db,
+        background,
+        previous_status=previous_status,
+        previous_progress=previous_progress,
+    )
     return background
 
 
@@ -300,6 +363,14 @@ def sync_scan_background_task(
         )
         db.add(background)
         db.flush()
+        record_background_task_log(
+            db,
+            background,
+            event="created",
+            message="本地扫描任务已接入统一任务中心",
+        )
+    previous_status = background.status
+    previous_progress = background.progress
     _sync_common_task_fields(
         background,
         status=normalize_task_status(task.status),
@@ -319,6 +390,12 @@ def sync_scan_background_task(
         }
     elif background.status == BackgroundTaskStatus.FAILED:
         background.error_code = "MEDIA_SCAN_FAILED"
+    _record_sync_change(
+        db,
+        background,
+        previous_status=previous_status,
+        previous_progress=previous_progress,
+    )
     return background
 
 
@@ -359,6 +436,14 @@ def sync_analysis_background_task(
         )
         db.add(background)
         db.flush()
+        record_background_task_log(
+            db,
+            background,
+            event="created",
+            message="媒体分析任务已接入统一任务中心",
+        )
+    previous_status = background.status
+    previous_progress = background.progress
     _sync_common_task_fields(
         background,
         status=normalize_task_status(task.status),
@@ -376,6 +461,12 @@ def sync_analysis_background_task(
         }
     elif background.status == BackgroundTaskStatus.FAILED:
         background.error_code = "MEDIA_ANALYSIS_FAILED"
+    _record_sync_change(
+        db,
+        background,
+        previous_status=previous_status,
+        previous_progress=previous_progress,
+    )
     return background
 
 
@@ -398,6 +489,14 @@ def sync_hls_background_task(
         )
         db.add(background)
         db.flush()
+        record_background_task_log(
+            db,
+            background,
+            event="created",
+            message="HLS 转码任务已接入统一任务中心",
+        )
+    previous_status = background.status
+    previous_progress = background.progress
     _sync_common_task_fields(
         background,
         status=normalize_task_status(task.status),
@@ -414,6 +513,12 @@ def sync_hls_background_task(
         }
     elif background.status == BackgroundTaskStatus.FAILED:
         background.error_code = "HLS_TRANSCODE_FAILED"
+    _record_sync_change(
+        db,
+        background,
+        previous_status=previous_status,
+        previous_progress=previous_progress,
+    )
     return background
 
 
@@ -463,3 +568,36 @@ def _sync_common_task_fields(
         if status == BackgroundTaskStatus.WAITING:
             background.heartbeat_at = None
             background.error_code = None
+
+
+def _record_sync_change(
+    db: Session,
+    task: BackgroundTask,
+    *,
+    previous_status: BackgroundTaskStatus,
+    previous_progress: float,
+) -> None:
+    if task.status != previous_status:
+        record_background_task_log(
+            db,
+            task,
+            event=task.status.value,
+            message=f"任务状态由 {previous_status.value} 更新为 {task.status.value}",
+            details={
+                "previous_status": previous_status.value,
+                "current_status": task.status.value,
+            },
+        )
+    elif task.progress != previous_progress:
+        record_background_task_log(
+            db,
+            task,
+            event="progress",
+            message=f"任务进度更新为 {task.progress:.2f}%",
+            details={
+                "previous_progress": previous_progress,
+                "current_progress": task.progress,
+                "processed_items": task.processed_items,
+                "total_items": task.total_items,
+            },
+        )

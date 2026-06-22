@@ -1,6 +1,7 @@
 from videocenter.models.analysis import AnalysisTask, AnalysisTaskStatus
 from videocenter.models.background_task import (
     BackgroundTask,
+    BackgroundTaskLog,
     BackgroundTaskStatus,
     BackgroundTaskType,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "AnalysisTask",
     "AnalysisTaskStatus",
     "BackgroundTask",
+    "BackgroundTaskLog",
     "BackgroundTaskStatus",
     "BackgroundTaskType",
     "DownloadTask",

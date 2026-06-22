@@ -28,6 +28,7 @@ from videocenter.main import app  # noqa: E402
 from videocenter.models import (  # noqa: E402, F401
     AnalysisTask,
     BackgroundTask,
+    BackgroundTaskLog,
     DownloadTask,
     Episode,
     HlsTask,

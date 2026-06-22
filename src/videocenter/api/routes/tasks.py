@@ -1,19 +1,38 @@
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from videocenter.core.database import get_db
 from videocenter.core.exceptions import ConflictError, NotFoundError
+from videocenter.models.analysis import AnalysisTask
 from videocenter.models.background_task import (
     BackgroundTask,
+    BackgroundTaskLog,
     BackgroundTaskStatus,
     BackgroundTaskType,
 )
 from videocenter.models.download import DownloadTask
-from videocenter.schemas.background_task import BackgroundTaskPage, BackgroundTaskRead
-from videocenter.services.downloads import cancel_download
+from videocenter.models.hls import HlsTask, HlsTaskStatus
+from videocenter.models.scan import ScanTask, ScanTaskStatus
+from videocenter.schemas.background_task import (
+    BackgroundTaskCleanupRequest,
+    BackgroundTaskCleanupResponse,
+    BackgroundTaskLogPage,
+    BackgroundTaskPage,
+    BackgroundTaskRead,
+)
+from videocenter.services.analysis_tasks import retry_analysis_task, start_analysis_task
+from videocenter.services.background_tasks import (
+    record_background_task_log,
+    sync_hls_background_task,
+    sync_scan_background_task,
+)
+from videocenter.services.downloads import cancel_download, retry_download
+from videocenter.services.hls import start_hls_task
+from videocenter.services.local_library import start_scan_task
 
 router = APIRouter()
 
@@ -51,6 +70,49 @@ def list_background_tasks(
     )
 
 
+@router.post("/cleanup", response_model=BackgroundTaskCleanupResponse)
+def cleanup_background_tasks(
+    payload: BackgroundTaskCleanupRequest,
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.now() - timedelta(days=payload.max_age_days)
+    task_ids = list(
+        db.scalars(
+            select(BackgroundTask.id).where(
+                BackgroundTask.status.in_(
+                    [
+                        BackgroundTaskStatus.COMPLETED,
+                        BackgroundTaskStatus.FAILED,
+                        BackgroundTaskStatus.CANCELLED,
+                    ]
+                ),
+                BackgroundTask.completed_at.is_not(None),
+                BackgroundTask.completed_at <= cutoff,
+            )
+        ).all()
+    )
+    if not task_ids:
+        return BackgroundTaskCleanupResponse(
+            deleted_task_count=0,
+            deleted_task_ids=[],
+            deleted_log_count=0,
+        )
+    deleted_log_count = (
+        db.scalar(
+            select(func.count(BackgroundTaskLog.id)).where(BackgroundTaskLog.task_id.in_(task_ids))
+        )
+        or 0
+    )
+    db.execute(delete(BackgroundTaskLog).where(BackgroundTaskLog.task_id.in_(task_ids)))
+    db.execute(delete(BackgroundTask).where(BackgroundTask.id.in_(task_ids)))
+    db.commit()
+    return BackgroundTaskCleanupResponse(
+        deleted_task_count=len(task_ids),
+        deleted_task_ids=task_ids,
+        deleted_log_count=deleted_log_count,
+    )
+
+
 @router.get("/{task_id}", response_model=BackgroundTaskRead)
 def get_background_task(
     task_id: Annotated[int, Path(gt=0)],
@@ -60,6 +122,39 @@ def get_background_task(
     if task is None:
         raise NotFoundError("后台任务不存在", code="BACKGROUND_TASK_NOT_FOUND")
     return task
+
+
+@router.get("/{task_id}/logs", response_model=BackgroundTaskLogPage)
+def list_background_task_logs(
+    task_id: Annotated[int, Path(gt=0)],
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=500),
+    event: str | None = Query(default=None, min_length=1, max_length=100),
+    db: Session = Depends(get_db),
+):
+    if db.get(BackgroundTask, task_id) is None:
+        raise NotFoundError("后台任务不存在", code="BACKGROUND_TASK_NOT_FOUND")
+    filters = [BackgroundTaskLog.task_id == task_id]
+    if event is not None:
+        filters.append(BackgroundTaskLog.event == event)
+    total = db.scalar(select(func.count(BackgroundTaskLog.id)).where(*filters)) or 0
+    total_pages = (total + page_size - 1) // page_size
+    items = db.scalars(
+        select(BackgroundTaskLog)
+        .where(*filters)
+        .order_by(BackgroundTaskLog.created_at.desc(), BackgroundTaskLog.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return BackgroundTaskLogPage(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_previous=page > 1 and total_pages > 0,
+    )
 
 
 @router.post("/{task_id}/cancel", response_model=BackgroundTaskRead)
@@ -100,3 +195,131 @@ def cancel_background_task(
     cancel_download(db, download)
     db.refresh(task)
     return task
+
+
+@router.post("/{task_id}/retry", response_model=BackgroundTaskRead)
+def retry_background_task(
+    task_id: Annotated[int, Path(gt=0)],
+    db: Session = Depends(get_db),
+):
+    task = db.get(BackgroundTask, task_id)
+    if task is None:
+        raise NotFoundError("后台任务不存在", code="BACKGROUND_TASK_NOT_FOUND")
+    if task.status != BackgroundTaskStatus.FAILED:
+        raise ConflictError(
+            "只有失败状态的后台任务可以重试",
+            code="BACKGROUND_TASK_NOT_RETRYABLE",
+            details={"status": task.status.value},
+        )
+    if task.source_task_id is None:
+        raise ConflictError(
+            "后台任务缺少来源任务，无法重试",
+            code="BACKGROUND_TASK_SOURCE_MISSING",
+        )
+
+    if task.task_type == BackgroundTaskType.DOWNLOAD:
+        source = db.get(DownloadTask, task.source_task_id)
+        if source is None:
+            raise ConflictError(
+                "后台任务关联的下载任务不存在",
+                code="BACKGROUND_TASK_SOURCE_MISSING",
+            )
+        retry_download(db, source)
+        db.refresh(task)
+        record_background_task_log(
+            db,
+            task,
+            event="retry",
+            message="下载任务已重新排队",
+            details={"attempt": task.attempt},
+        )
+        db.commit()
+        db.refresh(task)
+        return task
+
+    if task.task_type == BackgroundTaskType.MEDIA_ANALYSIS:
+        source = db.get(AnalysisTask, task.source_task_id)
+        if source is None:
+            raise ConflictError(
+                "后台任务关联的分析任务不存在",
+                code="BACKGROUND_TASK_SOURCE_MISSING",
+            )
+        retry_source = retry_analysis_task(db, source)
+        start_analysis_task(retry_source.id)
+        retried = db.scalar(
+            select(BackgroundTask).where(
+                BackgroundTask.task_type == BackgroundTaskType.MEDIA_ANALYSIS,
+                BackgroundTask.source_task_id == retry_source.id,
+            )
+        )
+        record_background_task_log(
+            db,
+            retried,
+            event="retry",
+            message="媒体分析任务已创建重试任务",
+            details={"retried_from_task_id": task.id},
+        )
+        db.commit()
+        db.refresh(retried)
+        return retried
+
+    if task.task_type == BackgroundTaskType.MEDIA_SCAN:
+        source = db.get(ScanTask, task.source_task_id)
+        if source is None:
+            raise ConflictError(
+                "后台任务关联的扫描任务不存在",
+                code="BACKGROUND_TASK_SOURCE_MISSING",
+            )
+        source.status = ScanTaskStatus.WAITING
+        source.progress = 0
+        source.processed_files = 0
+        source.error_message = None
+        source.started_at = None
+        source.completed_at = None
+        task.max_attempts = max(task.max_attempts, task.attempt + 1)
+        task.attempt += 1
+        sync_scan_background_task(db, source)
+        record_background_task_log(
+            db,
+            task,
+            event="retry",
+            message="本地扫描任务已重新排队",
+            details={"attempt": task.attempt},
+        )
+        db.commit()
+        start_scan_task(source.id)
+        db.refresh(task)
+        return task
+
+    if task.task_type == BackgroundTaskType.HLS_TRANSCODE:
+        source = db.get(HlsTask, task.source_task_id)
+        if source is None:
+            raise ConflictError(
+                "后台任务关联的 HLS 任务不存在",
+                code="BACKGROUND_TASK_SOURCE_MISSING",
+            )
+        source.status = HlsTaskStatus.WAITING
+        source.progress = 0
+        source.error_message = None
+        source.started_at = None
+        source.completed_at = None
+        task.max_attempts = max(task.max_attempts, task.attempt + 1)
+        task.attempt += 1
+        sync_hls_background_task(db, source)
+        record_background_task_log(
+            db,
+            task,
+            event="retry",
+            message="HLS 转码任务已重新排队",
+            details={"attempt": task.attempt},
+        )
+        db.commit()
+        start_hls_task(source.id)
+        db.refresh(task)
+        return task
+
+    raise ConflictError(
+        "该类型后台任务尚未接入失败重试",
+        code="BACKGROUND_TASK_RETRY_NOT_SUPPORTED",
+        details={"task_type": task.task_type.value},
+    )

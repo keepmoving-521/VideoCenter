@@ -288,6 +288,9 @@ HLS 实时进度、并发限制和缓存清理请参阅
 统一任务进度查询与取消请参阅
 [统一任务查询取消文档](docs/background-task-progress-cancellation.md)。
 
+统一任务失败重试、日志和历史清理请参阅
+[统一任务生命周期文档](docs/background-task-retry-logs-cleanup.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅
