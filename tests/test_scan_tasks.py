@@ -1,8 +1,14 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from videocenter.models.background_task import (
+    BackgroundTask,
+    BackgroundTaskStatus,
+    BackgroundTaskType,
+)
 from videocenter.models.media import LocalResource, MediaStatus
 from videocenter.models.scan import ScanTask, ScanTaskStatus
 from videocenter.services.local_library import restore_scan_tasks, run_scan_task
@@ -39,6 +45,14 @@ def test_scan_task_runs_in_background_and_reports_progress(
         assert task["status"] == "waiting"
         assert task["progress"] == 0
         assert started == [task["id"]]
+        background = db_session.scalar(
+            select(BackgroundTask).where(
+                BackgroundTask.task_type == BackgroundTaskType.MEDIA_SCAN,
+                BackgroundTask.source_task_id == task["id"],
+            )
+        )
+        assert background is not None
+        assert background.status == BackgroundTaskStatus.WAITING
 
         run_scan_task(task["id"])
         detail = api_client.get(f"/api/v1/local-resources/scan-tasks/{task['id']}").json()
@@ -50,6 +64,12 @@ def test_scan_task_runs_in_background_and_reports_progress(
         assert detail["added_files"] == 2
         assert detail["updated_files"] == 0
         assert detail["skipped_files"] == 0
+        db_session.refresh(background)
+        assert background.status == BackgroundTaskStatus.COMPLETED
+        assert background.progress == 100
+        assert background.processed_items == 2
+        assert background.total_items == 2
+        assert background.task_result["added_files"] == 2
         assert len(api_client.get("/api/v1/local-resources").json()) == 2
         assert api_client.get("/api/v1/local-resources/scan-tasks").json()[0]["id"] == task["id"]
     finally:

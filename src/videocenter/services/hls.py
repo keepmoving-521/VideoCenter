@@ -15,6 +15,7 @@ from videocenter.core.database import SessionLocal
 from videocenter.core.exceptions import ConflictError, NotFoundError
 from videocenter.models.hls import HlsTask, HlsTaskStatus
 from videocenter.models.media import LocalResource
+from videocenter.services.background_tasks import sync_hls_background_task
 from videocenter.services.media_artwork import MEDIA_CACHE_DIRECTORY_NAME
 
 logger = logging.getLogger(__name__)
@@ -105,10 +106,14 @@ def create_or_reuse_hls_task(db: Session, resource: LocalResource) -> HlsTask:
     )
     if existing is not None:
         if existing.status != HlsTaskStatus.COMPLETED or _task_files_exist(existing):
+            sync_hls_background_task(db, existing)
+            db.commit()
             return existing
 
     task = HlsTask(resource_id=resource.id, status=HlsTaskStatus.WAITING)
     db.add(task)
+    db.flush()
+    sync_hls_background_task(db, task)
     db.commit()
     db.refresh(task)
     return task
@@ -154,6 +159,7 @@ def run_hls_task(task_id: int) -> None:
             task.output_directory = str(output_directory)
             task.playlist_path = str(playlist_path)
             task.error_message = None
+            sync_hls_background_task(db, task)
             db.commit()
 
             command = [
@@ -209,6 +215,7 @@ def run_hls_task(task_id: int) -> None:
             task.status = HlsTaskStatus.COMPLETED
             task.progress = 100
             task.completed_at = datetime.now()
+            sync_hls_background_task(db, task)
             db.commit()
     except Exception as exc:
         with SessionLocal() as db:
@@ -217,6 +224,7 @@ def run_hls_task(task_id: int) -> None:
                 task.status = HlsTaskStatus.FAILED
                 task.error_message = str(exc)
                 task.completed_at = datetime.now()
+                sync_hls_background_task(db, task)
                 db.commit()
         logger.exception("HLS transcoding failed", extra={"hls_task_id": task_id})
 
@@ -237,6 +245,9 @@ def restore_hls_tasks() -> int:
         task_ids = db.scalars(
             select(HlsTask.id).where(HlsTask.status == HlsTaskStatus.WAITING).order_by(HlsTask.id)
         ).all()
+        tasks = db.scalars(select(HlsTask).where(HlsTask.id.in_(task_ids))).all()
+        for task in tasks:
+            sync_hls_background_task(db, task)
         db.commit()
     for task_id in task_ids:
         start_hls_task(task_id)
@@ -347,6 +358,8 @@ def _consume_ffmpeg_progress(
             continue
         task.progress = progress
         last_progress = progress
+        if task.id is not None:
+            sync_hls_background_task(db, task)
         db.commit()
 
 

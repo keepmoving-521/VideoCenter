@@ -3,8 +3,14 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from videocenter.models.background_task import (
+    BackgroundTask,
+    BackgroundTaskStatus,
+    BackgroundTaskType,
+)
 from videocenter.models.hls import HlsTask
 from videocenter.services.hls import run_hls_task
 
@@ -65,6 +71,14 @@ def test_hls_task_generates_playlist_and_serves_segments(
         created = response.json()
         assert created["status"] == "waiting"
         assert created["playlist_url"] is None
+        background = db_session.scalar(
+            select(BackgroundTask).where(
+                BackgroundTask.task_type == BackgroundTaskType.HLS_TRANSCODE,
+                BackgroundTask.source_task_id == created["id"],
+            )
+        )
+        assert background is not None
+        assert background.status == BackgroundTaskStatus.WAITING
 
         run_hls_task(created["id"])
         detail = api_client.get(f"/api/v1/stream/hls-tasks/{created['id']}").json()
@@ -72,6 +86,11 @@ def test_hls_task_generates_playlist_and_serves_segments(
         assert detail["progress"] == 100
         assert detail["cache_available"] is True
         assert detail["playlist_url"] == (f"/api/v1/stream/hls/{created['id']}/index.m3u8")
+        db_session.refresh(background)
+        assert background.status == BackgroundTaskStatus.COMPLETED
+        assert background.progress == 100
+        assert background.task_result["resource_id"] == resource.id
+        assert background.task_result["playlist_path"].endswith("index.m3u8")
 
         playlist = api_client.get(detail["playlist_url"])
         assert playlist.status_code == 200

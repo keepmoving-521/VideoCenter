@@ -11,6 +11,7 @@ from videocenter.core.config import get_settings
 from videocenter.core.database import SessionLocal
 from videocenter.models.media import LocalResource
 from videocenter.models.scan import ScanTask, ScanTaskStatus
+from videocenter.services.background_tasks import sync_scan_background_task
 from videocenter.services.downloads import update_media_download_status
 from videocenter.services.local_file_hashes import calculate_sha256
 from videocenter.services.local_resource_analysis import analyze_local_resource
@@ -48,6 +49,8 @@ def create_scan_task(
         status=ScanTaskStatus.WAITING,
     )
     db.add(task)
+    db.flush()
+    sync_scan_background_task(db, task)
     db.commit()
     db.refresh(task)
     return task
@@ -74,6 +77,7 @@ def run_scan_task(task_id: int) -> None:
             task.status = ScanTaskStatus.RUNNING
             task.started_at = datetime.now()
             task.error_message = None
+            sync_scan_background_task(db, task)
             db.commit()
 
             files = sorted(
@@ -86,6 +90,7 @@ def run_scan_task(task_id: int) -> None:
             )
             task.total_files = len(files)
             task.discovered_files = len(files)
+            sync_scan_background_task(db, task)
             db.commit()
 
             discovered_paths = {str(path.resolve()) for path in files}
@@ -96,6 +101,7 @@ def run_scan_task(task_id: int) -> None:
                     affected_media_ids.add(media_id)
                 task.processed_files = index
                 task.progress = round(index / len(files) * 100, 2) if files else 100
+                sync_scan_background_task(db, task)
                 db.commit()
 
             affected_media_ids.update(
@@ -111,6 +117,7 @@ def run_scan_task(task_id: int) -> None:
             task.progress = 100
             task.status = ScanTaskStatus.COMPLETED
             task.completed_at = datetime.now()
+            sync_scan_background_task(db, task)
             db.commit()
             logger.info(
                 "Local media scan completed",
@@ -132,6 +139,7 @@ def run_scan_task(task_id: int) -> None:
                 task.status = ScanTaskStatus.FAILED
                 task.error_message = str(exc)
                 task.completed_at = datetime.now()
+                sync_scan_background_task(db, task)
                 db.commit()
         logger.exception(
             "Local media scan failed",
@@ -263,6 +271,9 @@ def restore_scan_tasks() -> int:
             .where(ScanTask.status == ScanTaskStatus.WAITING)
             .order_by(ScanTask.id)
         ).all()
+        tasks = db.scalars(select(ScanTask).where(ScanTask.id.in_(task_ids))).all()
+        for task in tasks:
+            sync_scan_background_task(db, task)
         db.commit()
     for task_id in task_ids:
         start_scan_task(task_id)

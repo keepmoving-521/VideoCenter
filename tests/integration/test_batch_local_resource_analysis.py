@@ -1,9 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tests.support.api import ApiAssertions
 from videocenter.models.analysis import AnalysisTask, AnalysisTaskStatus
+from videocenter.models.background_task import (
+    BackgroundTask,
+    BackgroundTaskStatus,
+    BackgroundTaskType,
+)
 from videocenter.services.analysis_tasks import run_analysis_task
 
 pytestmark = pytest.mark.integration
@@ -56,6 +62,14 @@ def test_batch_analysis_task_reports_progress_and_results(
     created = response.json()
     assert created["status"] == "waiting"
     assert created["total_resources"] == 4
+    background = db_session.scalar(
+        select(BackgroundTask).where(
+            BackgroundTask.task_type == BackgroundTaskType.MEDIA_ANALYSIS,
+            BackgroundTask.source_task_id == created["id"],
+        )
+    )
+    assert background is not None
+    assert background.status == BackgroundTaskStatus.WAITING
 
     run_analysis_task(created["id"])
     detail = api_client.get(f"/api/v1/local-resources/analysis-tasks/{created['id']}").json()
@@ -69,6 +83,11 @@ def test_batch_analysis_task_reports_progress_and_results(
     assert api_client.get("/api/v1/local-resources/analysis-tasks").json()[0]["id"] == created["id"]
     db_session.refresh(analyzed)
     assert analyzed.video_codec == "hevc"
+    db_session.refresh(background)
+    assert background.status == BackgroundTaskStatus.COMPLETED
+    assert background.processed_items == 4
+    assert background.total_items == 4
+    assert background.task_result["analyzed_resource_ids"] == [analyzed.id]
 
 
 def test_analysis_failure_can_be_retried_as_new_task(
@@ -116,6 +135,21 @@ def test_analysis_failure_can_be_retried_as_new_task(
     assert retry["resource_ids"] == [second.id]
     assert retry["force"] is True
     assert retry["status"] == "waiting"
+    original_background = db_session.scalar(
+        select(BackgroundTask).where(
+            BackgroundTask.task_type == BackgroundTaskType.MEDIA_ANALYSIS,
+            BackgroundTask.source_task_id == created["id"],
+        )
+    )
+    retry_background = db_session.scalar(
+        select(BackgroundTask).where(
+            BackgroundTask.task_type == BackgroundTaskType.MEDIA_ANALYSIS,
+            BackgroundTask.source_task_id == retry["id"],
+        )
+    )
+    assert retry_background is not None
+    assert retry_background.parent_task_id == original_background.id
+    assert retry_background.attempt == original_background.attempt + 1
 
 
 def test_analysis_task_not_retryable_and_not_found(

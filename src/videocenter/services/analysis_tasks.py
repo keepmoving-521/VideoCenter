@@ -9,6 +9,7 @@ from videocenter.core.database import SessionLocal
 from videocenter.core.exceptions import ConflictError
 from videocenter.models.analysis import AnalysisTask, AnalysisTaskStatus
 from videocenter.models.media import LocalResource
+from videocenter.services.background_tasks import sync_analysis_background_task
 from videocenter.services.local_resource_analysis import analyze_local_resource
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,8 @@ def create_analysis_task(
         status=AnalysisTaskStatus.WAITING,
     )
     db.add(task)
+    db.flush()
+    sync_analysis_background_task(db, task)
     db.commit()
     db.refresh(task)
     return task
@@ -57,17 +60,20 @@ def run_analysis_task(task_id: int) -> None:
             task.status = AnalysisTaskStatus.RUNNING
             task.started_at = datetime.now()
             task.error_message = None
+            sync_analysis_background_task(db, task)
             db.commit()
 
             for index, resource_id in enumerate(task.resource_ids, start=1):
                 _process_analysis_resource(db, task, resource_id)
                 task.processed_resources = index
                 task.progress = round(index / task.total_resources * 100, 2)
+                sync_analysis_background_task(db, task)
                 db.commit()
 
             task.progress = 100
             task.status = AnalysisTaskStatus.COMPLETED
             task.completed_at = datetime.now()
+            sync_analysis_background_task(db, task)
             db.commit()
     except Exception as exc:
         with SessionLocal() as db:
@@ -76,6 +82,7 @@ def run_analysis_task(task_id: int) -> None:
                 task.status = AnalysisTaskStatus.FAILED
                 task.error_message = str(exc)
                 task.completed_at = datetime.now()
+                sync_analysis_background_task(db, task)
                 db.commit()
         logger.exception("Video analysis task failed", extra={"analysis_task_id": task_id})
     finally:
@@ -152,6 +159,9 @@ def restore_analysis_tasks() -> int:
             .where(AnalysisTask.status == AnalysisTaskStatus.WAITING)
             .order_by(AnalysisTask.id)
         ).all()
+        tasks = db.scalars(select(AnalysisTask).where(AnalysisTask.id.in_(task_ids))).all()
+        for task in tasks:
+            sync_analysis_background_task(db, task)
         db.commit()
     for task_id in task_ids:
         start_analysis_task(task_id)

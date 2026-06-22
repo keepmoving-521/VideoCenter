@@ -4,12 +4,15 @@ from enum import StrEnum
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from videocenter.models.analysis import AnalysisTask
 from videocenter.models.background_task import (
     BackgroundTask,
     BackgroundTaskStatus,
     BackgroundTaskType,
 )
 from videocenter.models.download import DownloadTask
+from videocenter.models.hls import HlsTask
+from videocenter.models.scan import ScanTask
 
 ALLOWED_STATUS_TRANSITIONS: dict[
     BackgroundTaskStatus,
@@ -272,3 +275,191 @@ def sync_download_background_task(
     else:
         background.error_code = None
     return background
+
+
+def sync_scan_background_task(
+    db: Session,
+    task: ScanTask,
+) -> BackgroundTask:
+    background = _get_background_task(
+        db,
+        task_type=BackgroundTaskType.MEDIA_SCAN,
+        source_task_id=task.id,
+    )
+    if background is None:
+        background = BackgroundTask(
+            task_type=BackgroundTaskType.MEDIA_SCAN,
+            title=f"扫描媒体目录：{task.path}",
+            source_task_id=task.id,
+            cancellable=False,
+            task_payload={
+                "path": task.path,
+                "media_id": task.media_id,
+                "incremental": task.incremental,
+            },
+        )
+        db.add(background)
+        db.flush()
+    _sync_common_task_fields(
+        background,
+        status=normalize_task_status(task.status),
+        progress=task.progress,
+        processed_items=task.processed_files,
+        total_items=task.total_files,
+        error_message=task.error_message,
+    )
+    if background.status == BackgroundTaskStatus.COMPLETED:
+        background.task_result = {
+            "discovered_files": task.discovered_files,
+            "added_files": task.added_files,
+            "updated_files": task.updated_files,
+            "skipped_files": task.skipped_files,
+            "missing_files": task.missing_files,
+            "restored_files": task.restored_files,
+        }
+    elif background.status == BackgroundTaskStatus.FAILED:
+        background.error_code = "MEDIA_SCAN_FAILED"
+    return background
+
+
+def sync_analysis_background_task(
+    db: Session,
+    task: AnalysisTask,
+) -> BackgroundTask:
+    background = _get_background_task(
+        db,
+        task_type=BackgroundTaskType.MEDIA_ANALYSIS,
+        source_task_id=task.id,
+    )
+    if background is None:
+        parent_task_id = None
+        attempt = 1
+        if task.retry_of_task_id is not None:
+            parent = _get_background_task(
+                db,
+                task_type=BackgroundTaskType.MEDIA_ANALYSIS,
+                source_task_id=task.retry_of_task_id,
+            )
+            if parent is not None:
+                parent_task_id = parent.id
+                attempt = parent.attempt + 1
+        background = BackgroundTask(
+            task_type=BackgroundTaskType.MEDIA_ANALYSIS,
+            title=f"分析本地视频（{len(task.resource_ids)} 项）",
+            source_task_id=task.id,
+            parent_task_id=parent_task_id,
+            attempt=attempt,
+            max_attempts=max(attempt, 100),
+            cancellable=False,
+            task_payload={
+                "resource_ids": task.resource_ids,
+                "force": task.force,
+                "retry_of_task_id": task.retry_of_task_id,
+            },
+        )
+        db.add(background)
+        db.flush()
+    _sync_common_task_fields(
+        background,
+        status=normalize_task_status(task.status),
+        progress=task.progress,
+        processed_items=task.processed_resources,
+        total_items=task.total_resources,
+        error_message=task.error_message,
+    )
+    if background.status == BackgroundTaskStatus.COMPLETED:
+        background.task_result = {
+            "analyzed_resource_ids": task.analyzed_resource_ids,
+            "skipped_resource_ids": task.skipped_resource_ids,
+            "missing_resource_ids": task.missing_resource_ids,
+            "failures": task.failures,
+        }
+    elif background.status == BackgroundTaskStatus.FAILED:
+        background.error_code = "MEDIA_ANALYSIS_FAILED"
+    return background
+
+
+def sync_hls_background_task(
+    db: Session,
+    task: HlsTask,
+) -> BackgroundTask:
+    background = _get_background_task(
+        db,
+        task_type=BackgroundTaskType.HLS_TRANSCODE,
+        source_task_id=task.id,
+    )
+    if background is None:
+        background = BackgroundTask(
+            task_type=BackgroundTaskType.HLS_TRANSCODE,
+            title=f"HLS 转码：本地资源 {task.resource_id}",
+            source_task_id=task.id,
+            cancellable=False,
+            task_payload={"resource_id": task.resource_id},
+        )
+        db.add(background)
+        db.flush()
+    _sync_common_task_fields(
+        background,
+        status=normalize_task_status(task.status),
+        progress=task.progress,
+        processed_items=0,
+        total_items=None,
+        error_message=task.error_message,
+    )
+    if background.status == BackgroundTaskStatus.COMPLETED:
+        background.task_result = {
+            "resource_id": task.resource_id,
+            "output_directory": task.output_directory,
+            "playlist_path": task.playlist_path,
+        }
+    elif background.status == BackgroundTaskStatus.FAILED:
+        background.error_code = "HLS_TRANSCODE_FAILED"
+    return background
+
+
+def _get_background_task(
+    db: Session,
+    *,
+    task_type: BackgroundTaskType,
+    source_task_id: int,
+) -> BackgroundTask | None:
+    return db.scalar(
+        select(BackgroundTask).where(
+            BackgroundTask.task_type == task_type,
+            BackgroundTask.source_task_id == source_task_id,
+        )
+    )
+
+
+def _sync_common_task_fields(
+    background: BackgroundTask,
+    *,
+    status: BackgroundTaskStatus,
+    progress: float,
+    processed_items: int,
+    total_items: int | None,
+    error_message: str | None,
+) -> None:
+    background.status = status
+    background.progress = progress
+    background.processed_items = processed_items
+    background.total_items = total_items
+    background.error_message = error_message
+    now = datetime.now()
+    if status == BackgroundTaskStatus.RUNNING:
+        background.started_at = background.started_at or now
+        background.heartbeat_at = now
+        background.completed_at = None
+        background.error_code = None
+    elif status in {
+        BackgroundTaskStatus.COMPLETED,
+        BackgroundTaskStatus.FAILED,
+        BackgroundTaskStatus.CANCELLED,
+    }:
+        background.completed_at = now
+        background.heartbeat_at = now
+    else:
+        background.completed_at = None
+        if status == BackgroundTaskStatus.WAITING:
+            background.heartbeat_at = None
+            background.error_code = None
