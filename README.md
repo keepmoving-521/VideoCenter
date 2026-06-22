@@ -276,6 +276,9 @@ HLS 实时进度、并发限制和缓存清理请参阅
 统一后台任务模型设计请参阅
 [统一后台任务模型文档](docs/unified-background-task-model.md)。
 
+统一后台任务状态语义和流转规则请参阅
+[统一后台任务状态文档](docs/unified-background-task-statuses.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

@@ -77,5 +77,6 @@
 - [H10～H12：删除观看历史](watch-history-deletion.md)
 - [H13～H14：累计观看时长与每日统计](watch-time-statistics.md)
 - [Q01：统一后台任务模型](unified-background-task-model.md)
+- [Q02：统一后台任务状态定义](unified-background-task-statuses.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

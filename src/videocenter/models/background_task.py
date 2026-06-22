@@ -36,6 +36,25 @@ class BackgroundTaskStatus(StrEnum):
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+    @property
+    def is_terminal(self) -> bool:
+        return self in {
+            BackgroundTaskStatus.COMPLETED,
+            BackgroundTaskStatus.CANCELLED,
+        }
+
+    @property
+    def is_active(self) -> bool:
+        return self in {
+            BackgroundTaskStatus.WAITING,
+            BackgroundTaskStatus.RUNNING,
+            BackgroundTaskStatus.PAUSED,
+        }
+
+    @property
+    def is_successful(self) -> bool:
+        return self == BackgroundTaskStatus.COMPLETED
+
 
 class BackgroundTask(Base):
     __tablename__ = "background_tasks"

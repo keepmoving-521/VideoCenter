@@ -33,3 +33,11 @@ class BackgroundTaskRead(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     heartbeat_at: datetime | None
+
+
+class BackgroundTaskStatusDefinition(BaseModel):
+    status: BackgroundTaskStatus
+    terminal: bool
+    active: bool
+    successful: bool
+    allowed_targets: list[BackgroundTaskStatus]
