@@ -294,6 +294,9 @@ HLS 实时进度、并发限制和缓存清理请参阅
 应用重启后的统一任务恢复请参阅
 [统一任务恢复文档](docs/background-task-recovery.md)。
 
+WebSocket 实时任务状态推送请参阅
+[统一任务 WebSocket 文档](docs/background-task-websocket.md)。
+
 ## 运行环境
 
 系统支持开发、测试和生产环境的分层配置。配置文件、加载优先级和生产安全校验请参阅

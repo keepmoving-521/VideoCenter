@@ -14,6 +14,7 @@ from videocenter.models.background_task import (
 from videocenter.models.download import DownloadTask
 from videocenter.models.hls import HlsTask
 from videocenter.models.scan import ScanTask
+from videocenter.services.task_events import task_event_broker
 
 ALLOWED_STATUS_TRANSITIONS: dict[
     BackgroundTaskStatus,
@@ -165,6 +166,12 @@ def record_background_task_log(
         details=details or {},
     )
     db.add(log)
+    task_event_broker.publish(
+        task,
+        event=event,
+        message=message,
+        details=details,
+    )
     return log
 
 

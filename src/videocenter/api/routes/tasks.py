@@ -1,7 +1,15 @@
+import asyncio
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import (
+    APIRouter,
+    Depends,
+    Path,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -33,8 +41,76 @@ from videocenter.services.background_tasks import (
 from videocenter.services.downloads import cancel_download, retry_download
 from videocenter.services.hls import start_hls_task
 from videocenter.services.local_library import start_scan_task
+from videocenter.services.task_events import task_event_broker
 
 router = APIRouter()
+
+
+@router.websocket("/ws")
+async def task_status_websocket(websocket: WebSocket):
+    task_type_value = websocket.query_params.get("task_type")
+    status_value = websocket.query_params.get("status")
+    try:
+        task_type = BackgroundTaskType(task_type_value) if task_type_value is not None else None
+        task_status = BackgroundTaskStatus(status_value) if status_value is not None else None
+    except ValueError:
+        await websocket.accept()
+        await websocket.send_json(
+            {
+                "type": "error",
+                "code": "INVALID_TASK_EVENT_FILTER",
+                "message": "任务类型或状态筛选值无效",
+            }
+        )
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "task_type": task_type.value if task_type else None,
+            "status": task_status.value if task_status else None,
+        }
+    )
+    async with task_event_broker.subscribe(
+        task_type=task_type,
+        status=task_status,
+    ) as event_queue:
+        try:
+            while True:
+                event_waiter = asyncio.create_task(event_queue.get())
+                client_waiter = asyncio.create_task(websocket.receive_text())
+                done, pending = await asyncio.wait(
+                    {event_waiter, client_waiter},
+                    timeout=25,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for waiter in pending:
+                    waiter.cancel()
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+                if not done:
+                    await websocket.send_json(
+                        {
+                            "type": "heartbeat",
+                            "sent_at": datetime.now().isoformat(),
+                        }
+                    )
+                    continue
+                if event_waiter in done:
+                    await websocket.send_json(event_waiter.result())
+                if client_waiter in done:
+                    message = client_waiter.result()
+                    if message.casefold() == "ping":
+                        await websocket.send_json(
+                            {
+                                "type": "pong",
+                                "sent_at": datetime.now().isoformat(),
+                            }
+                        )
+        except WebSocketDisconnect:
+            return
 
 
 @router.get("", response_model=BackgroundTaskPage)
