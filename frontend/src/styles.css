@@ -1,0 +1,112 @@
+:root {
+  color: #f4f4f5;
+  background: #101218;
+  font-family:
+    Inter, "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 20% 20%, rgb(78 93 170 / 24%), transparent 36%),
+    radial-gradient(circle at 85% 80%, rgb(28 125 112 / 20%), transparent 32%),
+    #101218;
+}
+
+.welcome-card {
+  width: min(680px, 100%);
+  padding: clamp(32px, 7vw, 72px);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 28px;
+  background: rgb(24 27 36 / 88%);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 35%);
+}
+
+.eyebrow {
+  margin: 0 0 14px;
+  color: #8da2ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(44px, 10vw, 78px);
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+}
+
+.description {
+  margin: 28px 0;
+  color: #c8cad2;
+  font-size: clamp(17px, 3vw, 21px);
+  line-height: 1.7;
+}
+
+.service-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  color: #d8d9df;
+  background: rgb(255 255 255 / 5%);
+  font-size: 14px;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #f3b94e;
+  box-shadow: 0 0 14px currentcolor;
+}
+
+.service-status--online .status-dot {
+  background: #4fd1a5;
+}
+
+.service-status--offline .status-dot {
+  background: #f36b78;
+}
+
+.next-step {
+  margin: 28px 0 0;
+  color: #8f929d;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+@media (max-width: 540px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .welcome-card {
+    border-radius: 20px;
+  }
+}

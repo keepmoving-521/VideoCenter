@@ -125,6 +125,16 @@ ipython_config.py
 data/
 .uv-cache/
 
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+frontend/.npm-cache/
+frontend/.cache/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+frontend/*.tsbuildinfo
+
 # pixi
 #   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
 # pixi.lock

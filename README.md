@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/keepmoving-521/VideoCenter/actions/workflows/ci.yml/badge.svg)](https://github.com/keepmoving-521/VideoCenter/actions/workflows/ci.yml)
 
-VideoCenter 是一个面向个人使用的轻量级影视库后端，用于统一管理影视条目、下载任务、本地视频、在线播放进度和观看历史。
+VideoCenter 是一个面向个人使用的轻量级影视库系统，用于统一管理影视条目、下载任务、本地视频、在线播放进度和观看历史。
 
 ## 当前能力
 
@@ -296,6 +296,9 @@ HLS 实时进度、并发限制和缓存清理请参阅
 
 WebSocket 实时任务状态推送请参阅
 [统一任务 WebSocket 文档](docs/background-task-websocket.md)。
+
+前端工程安装、启动和构建方式请参阅
+[前端初始化文档](docs/frontend-initialization.md)。
 
 ## 运行环境
 
