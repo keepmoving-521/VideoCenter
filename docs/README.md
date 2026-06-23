@@ -85,5 +85,6 @@
 - [Q13：应用重启后恢复任务](background-task-recovery.md)
 - [Q14：WebSocket 推送任务状态](background-task-websocket.md)
 - [W01：初始化前端项目](frontend-initialization.md)
+- [W02：前端基础页面布局](frontend-base-layout.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。
