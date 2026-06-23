@@ -107,7 +107,7 @@ export class ApiClient {
       config.timeoutMs,
       DEFAULT_TIMEOUT_MS,
     );
-    this.fetcher = config.fetcher ?? fetch;
+    this.fetcher = config.fetcher ?? globalThis.fetch.bind(globalThis);
   }
 
   get<T>(

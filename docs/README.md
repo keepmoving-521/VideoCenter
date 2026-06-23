@@ -87,5 +87,6 @@
 - [W01：初始化前端项目](frontend-initialization.md)
 - [W02：前端基础页面布局](frontend-base-layout.md)
 - [W03：封装后端 API 请求](frontend-api-client.md)
+- [W04：实现首页数据概览](frontend-home-dashboard.md)
 
 后续功能建议继续使用“需求编号 + 功能名称”的方式记录，并在此处增加索引。

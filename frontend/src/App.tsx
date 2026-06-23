@@ -1,8 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
 
+import {
+  getHomeDashboard,
+  type BackgroundTask,
+  type ContinueWatchingItem,
+  type HomeDashboardData,
+} from "./api/home";
 import { getHealth } from "./api/system";
 
 type BackendState = "checking" | "online" | "offline";
+
+const BACKEND_HEALTH_CHECK_INTERVAL_MS = 10_000;
 
 interface NavigationItem {
   id: string;
@@ -50,33 +58,6 @@ const navigationItems: NavigationItem[] = [
   },
 ];
 
-const overviewCards = [
-  {
-    label: "影视条目",
-    value: "—",
-    hint: "等待接入影视库数据",
-    tone: "violet",
-  },
-  {
-    label: "正在下载",
-    value: "—",
-    hint: "等待接入下载任务",
-    tone: "blue",
-  },
-  {
-    label: "本地视频",
-    value: "—",
-    hint: "等待接入媒体扫描",
-    tone: "teal",
-  },
-  {
-    label: "本周观看",
-    value: "—",
-    hint: "等待接入观看统计",
-    tone: "amber",
-  },
-];
-
 function App() {
   const [backendState, setBackendState] =
     useState<BackendState>("checking");
@@ -86,20 +67,28 @@ function App() {
   useEffect(() => {
     let active = true;
 
-    getHealth()
-      .then(() => {
+    async function checkBackendHealth() {
+      try {
+        await getHealth();
         if (active) {
           setBackendState("online");
         }
-      })
-      .catch(() => {
+      } catch {
         if (active) {
           setBackendState("offline");
         }
-      });
+      }
+    }
+
+    void checkBackendHealth();
+    const healthCheckTimer = window.setInterval(
+      () => void checkBackendHealth(),
+      BACKEND_HEALTH_CHECK_INTERVAL_MS,
+    );
 
     return () => {
       active = false;
+      window.clearInterval(healthCheckTimer);
     };
   }, []);
 
@@ -244,6 +233,105 @@ function App() {
 }
 
 function HomeContent({ backendState }: { backendState: BackendState }) {
+  const [dashboard, setDashboard] = useState<HomeDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (backendState === "offline") {
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    setLoading(true);
+    getHomeDashboard(controller.signal)
+      .then(setDashboard)
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setDashboard({
+            mediaStats: null,
+            downloads: null,
+            continueWatching: null,
+            weeklyWatchStats: null,
+            tasks: null,
+            errors: [
+              {
+                section: "media",
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "首页数据加载失败",
+              },
+            ],
+          });
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [backendState]);
+
+  const activeDownloads =
+    dashboard?.downloads?.filter((download) =>
+      ["waiting", "downloading", "paused"].includes(download.status),
+    ).length ?? null;
+  const weeklyMinutes =
+    dashboard?.weeklyWatchStats?.items.reduce(
+      (total, item) => total + item.watched_minutes,
+      0,
+    ) ?? null;
+  const overviewCards = [
+    {
+      label: "影视条目",
+      value: formatDashboardNumber(dashboard?.mediaStats?.total_media, loading),
+      hint:
+        dashboard?.mediaStats === null && !loading
+          ? "影视库数据暂不可用"
+          : `${dashboard?.mediaStats?.favorite_media ?? 0} 部已收藏`,
+      tone: "violet",
+    },
+    {
+      label: "进行中下载",
+      value: formatDashboardNumber(activeDownloads, loading),
+      hint:
+        dashboard?.downloads === null && !loading
+          ? "下载数据暂不可用"
+          : `共 ${dashboard?.downloads?.length ?? 0} 个下载任务`,
+      tone: "blue",
+    },
+    {
+      label: "本地视频",
+      value: formatDashboardNumber(
+        dashboard?.mediaStats?.total_local_resources,
+        loading,
+      ),
+      hint:
+        dashboard?.mediaStats === null && !loading
+          ? "本地资源数据暂不可用"
+          : `${dashboard?.mediaStats?.media_with_local_resources ?? 0} 部影视可播放`,
+      tone: "teal",
+    },
+    {
+      label: "本周观看",
+      value: formatWatchDuration(weeklyMinutes, loading),
+      hint:
+        dashboard?.weeklyWatchStats === null && !loading
+          ? "观看统计暂不可用"
+          : `${dashboard?.weeklyWatchStats?.items.reduce(
+              (total, item) => total + item.watched_media_count,
+              0,
+            ) ?? 0} 次影片观看`,
+      tone: "amber",
+    },
+  ];
+  const continueItems = dashboard?.continueWatching?.items ?? [];
+  const taskItems = dashboard?.tasks?.items ?? [];
+
   return (
     <div className="page-stack">
       <section className="hero-panel">
@@ -284,7 +372,11 @@ function HomeContent({ backendState }: { backendState: BackendState }) {
             className={`connection-pill connection-pill--${backendState}`}
           >
             <span className="status-dot" />
-            {backendState === "online" ? "数据服务已连接" : "等待数据服务"}
+            {loading
+              ? "正在更新数据"
+              : dashboard?.errors.length
+                ? `${dashboard.errors.length} 项数据暂不可用`
+                : "数据已更新"}
           </span>
         </div>
         <div className="overview-grid">
@@ -312,15 +404,33 @@ function HomeContent({ backendState }: { backendState: BackendState }) {
               查看全部 <ArrowIcon />
             </button>
           </div>
-          <div className="empty-state compact">
-            <span className="empty-icon">
-              <PlayIcon />
-            </span>
-            <div>
-              <strong>还没有播放记录</strong>
-              <p>开始观看影片后，这里会显示上次的播放位置。</p>
+          {loading ? (
+            <DashboardLoading label="正在读取播放进度" />
+          ) : continueItems.length ? (
+            <div className="continue-list">
+              {continueItems.map((item) => (
+                <ContinueWatchingRow item={item} key={item.id} />
+              ))}
             </div>
-          </div>
+          ) : (
+            <div className="empty-state compact">
+              <span className="empty-icon">
+                <PlayIcon />
+              </span>
+              <div>
+                <strong>
+                  {dashboard?.continueWatching === null
+                    ? "播放记录暂不可用"
+                    : "还没有播放记录"}
+                </strong>
+                <p>
+                  {dashboard?.continueWatching === null
+                    ? "请确认后端服务状态后刷新页面。"
+                    : "开始观看影片后，这里会显示上次的播放位置。"}
+                </p>
+              </div>
+            </div>
+          )}
         </article>
 
         <article className="content-card task-card">
@@ -331,17 +441,155 @@ function HomeContent({ backendState }: { backendState: BackendState }) {
             </div>
             <span className="live-badge">实时</span>
           </div>
-          <div className="task-placeholder">
-            <span className="task-pulse" />
-            <div>
-              <strong>暂无运行中的任务</strong>
-              <p>下载、扫描和转码进度会显示在这里。</p>
+          {loading ? (
+            <DashboardLoading label="正在读取任务状态" />
+          ) : taskItems.length ? (
+            <div className="task-list">
+              {taskItems.map((task) => (
+                <TaskRow task={task} key={task.id} />
+              ))}
             </div>
-          </div>
+          ) : (
+            <div className="task-placeholder">
+              <span className="task-pulse" />
+              <div>
+                <strong>
+                  {dashboard?.tasks === null
+                    ? "任务数据暂不可用"
+                    : "暂无任务记录"}
+                </strong>
+                <p>
+                  {dashboard?.tasks === null
+                    ? "请确认后端服务状态后刷新页面。"
+                    : "下载、扫描和转码进度会显示在这里。"}
+                </p>
+              </div>
+            </div>
+          )}
         </article>
       </section>
     </div>
   );
+}
+
+function ContinueWatchingRow({ item }: { item: ContinueWatchingItem }) {
+  const progress =
+    item.duration_seconds && item.duration_seconds > 0
+      ? Math.min(100, (item.position_seconds / item.duration_seconds) * 100)
+      : 0;
+
+  return (
+    <article className="continue-item">
+      <div
+        className="continue-poster"
+        style={
+          item.media.poster_url
+            ? { backgroundImage: `url("${item.media.poster_url}")` }
+            : undefined
+        }
+      >
+        {!item.media.poster_url && <LibraryIcon />}
+      </div>
+      <div className="continue-copy">
+        <strong>{item.media.title}</strong>
+        <span>
+          {item.media.release_year ?? "年份未知"} ·{" "}
+          {formatPlaybackPosition(item.position_seconds)}
+        </span>
+        <div className="progress-track" aria-label={`播放进度 ${Math.round(progress)}%`}>
+          <span style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+      <button className="continue-play" type="button" aria-label={`继续播放 ${item.media.title}`}>
+        <PlayIcon />
+      </button>
+    </article>
+  );
+}
+
+function TaskRow({ task }: { task: BackgroundTask }) {
+  const statusLabel = {
+    waiting: "等待中",
+    running: "运行中",
+    paused: "已暂停",
+    completed: "已完成",
+    failed: "失败",
+    cancelled: "已取消",
+  }[task.status];
+
+  return (
+    <article className="task-item">
+      <span className={`task-status task-status--${task.status}`} />
+      <div>
+        <strong>{task.title}</strong>
+        <span>{statusLabel} · {Math.round(task.progress)}%</span>
+      </div>
+      <time dateTime={task.updated_at}>{formatRelativeTime(task.updated_at)}</time>
+    </article>
+  );
+}
+
+function DashboardLoading({ label }: { label: string }) {
+  return (
+    <div className="dashboard-loading" role="status">
+      <span className="loading-spinner" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function formatDashboardNumber(
+  value: number | null | undefined,
+  loading: boolean,
+): string {
+  if (loading) {
+    return "···";
+  }
+  return value === null || value === undefined
+    ? "—"
+    : new Intl.NumberFormat("zh-CN").format(value);
+}
+
+function formatWatchDuration(
+  minutes: number | null,
+  loading: boolean,
+): string {
+  if (loading) {
+    return "···";
+  }
+  if (minutes === null) {
+    return "—";
+  }
+  if (minutes < 60) {
+    return `${Math.round(minutes)} 分钟`;
+  }
+  return `${(minutes / 60).toFixed(minutes >= 600 ? 0 : 1)} 小时`;
+}
+
+function formatPlaybackPosition(seconds: number): string {
+  const totalMinutes = Math.floor(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `看到 ${hours} 小时 ${minutes} 分` : `看到 ${minutes} 分钟`;
+}
+
+function formatRelativeTime(value: string): string {
+  const timestamp = new Date(value).getTime();
+  const elapsedMinutes = Math.max(
+    0,
+    Math.floor((Date.now() - timestamp) / 60_000),
+  );
+  if (elapsedMinutes < 1) {
+    return "刚刚";
+  }
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes} 分钟前`;
+  }
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `${elapsedHours} 小时前`;
+  }
+  return `${Math.floor(elapsedHours / 24)} 天前`;
 }
 
 function PlaceholderContent({
